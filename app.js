@@ -17,12 +17,14 @@ let locationMarker, locationCircle;
 let collapsedCommunities = {};
 let _lastBouncingEls = [];
 let communitySummaries = {};
+const PING_TO_SQM = 3.305785;  // 1坪 = 3.305785 m²
 let markerSettings = {
   bubbleMode: 'dual_ring',  // 'dual_ring' | 'bivariate'
   outerMode: 'unit_price', innerMode: 'total_price',
   contentMode: 'recent2yr',
   unitThresholds: [20, 45, 70], totalThresholds: [500, 1750, 3000],
   osmZoom: 16, showLotAddr: false, yearFormat: 'roc',
+  areaUnit: 'ping',  // 'ping' | 'sqm'
   // Bivariate thresholds
   bivUnitQ: [25, 40, 60], bivTotalQ: [800, 1500, 2500],
 };
@@ -36,8 +38,36 @@ const escHtml = s => s ? String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').
 const escAttr = s => s ? String(s).replace(/'/g, '&#39;').replace(/"/g, '&quot;').replace(/</g, '&lt;') : '';
 const cssId = s => s ? s.replace(/[^a-zA-Z0-9\u4e00-\u9fff]/g, '_') : '';
 function fmtWan(v) { if (!v || v <= 0) return '-'; const w = v / 10000; return w >= 10000 ? (w / 10000).toFixed(1) + '億' : Math.round(w) + '萬'; }
-function fmtArea(sqm, ping) { return ping > 0 ? ping.toFixed(1) + '坪' : (sqm > 0 ? sqm.toFixed(1) + 'm²' : '-'); }
-function fmtUnitPrice(ping) { return ping > 0 ? Math.round(ping / 10000) + '萬/坪' : '-'; }
+function fmtArea(sqm, ping) {
+  if (markerSettings.areaUnit === 'sqm') {
+    const m2 = sqm > 0 ? sqm : (ping > 0 ? ping * PING_TO_SQM : 0);
+    return m2 > 0 ? m2.toFixed(1) + ' m²' : '-';
+  }
+  return ping > 0 ? ping.toFixed(1) + '坪' : (sqm > 0 ? (sqm / PING_TO_SQM).toFixed(1) + '坪' : '-');
+}
+function fmtUnitPrice(unitPricePing) {
+  if (markerSettings.areaUnit === 'sqm') {
+    if (unitPricePing <= 0) return '-';
+    const perSqm = unitPricePing / PING_TO_SQM;
+    return Math.round(perSqm / 10000) + '萬/m²';
+  }
+  return unitPricePing > 0 ? Math.round(unitPricePing / 10000) + '萬/坪' : '-';
+}
+function fmtAvgArea(avgPing) {
+  if (markerSettings.areaUnit === 'sqm') {
+    const m2 = avgPing > 0 ? avgPing * PING_TO_SQM : 0;
+    return m2 > 0 ? m2.toFixed(1) + ' m²' : '-';
+  }
+  return avgPing > 0 ? avgPing.toFixed(1) + '坪' : '-';
+}
+function fmtAvgUnitWan(unitPricePing) {
+  if (markerSettings.areaUnit === 'sqm') {
+    if (unitPricePing <= 0) return '-';
+    return (unitPricePing / PING_TO_SQM / 10000).toFixed(1) + '萬/m²';
+  }
+  return unitPricePing > 0 ? (unitPricePing / 10000).toFixed(1) + '萬/坪' : '-';
+}
+function areaLabel() { return markerSettings.areaUnit === 'sqm' ? 'm²' : '坪'; }
 function isLotAddress(addr) { return /^\S*段\S*地號/.test(addr) || /段\d+地號/.test(addr); }
 function getLocationMode() { const z = map ? map.getZoom() : 15; return z >= (markerSettings.osmZoom || 16) ? 'osm' : 'db'; }
 
@@ -79,7 +109,7 @@ function updateCollapsedSummary() {
     el.innerHTML = '尚無搜尋結果';
     return;
   }
-  el.innerHTML = `共 <span class="val">${s.total}</span> 筆 ｜ 均價 <span class="val">${fmtWan(s.avg_price)}</span> ｜ 均坪 <span class="val">${s.avg_ping}坪</span>`;
+  el.innerHTML = `共 <span class="val">${s.total}</span> 筆 ｜ 均價 <span class="val">${fmtWan(s.avg_price)}</span> ｜ 均面積 <span class="val">${fmtAvgArea(s.avg_ping)}</span>`;
 }
 
 // ── Filter panel ──
@@ -375,7 +405,7 @@ function renderResults() {
     const cn = group.name, isCollapsed = collapsedCommunities[cn] === true;
     const stats = communitySummaries[cn] || computeLocalStats(group.items);
     html += `<div class="community-group">`;
-    const inlineStats = stats ? [stats.avg_unit_price_ping > 0 ? `均單 ${(stats.avg_unit_price_ping / 10000).toFixed(0)}萬/坪` : '', stats.avg_ping > 0 ? `均坪 ${stats.avg_ping.toFixed(0)}坪` : '', stats.avg_ratio > 0 ? `公設 ${stats.avg_ratio.toFixed(0)}%` : ''].filter(Boolean) : [];
+    const inlineStats = stats ? [stats.avg_unit_price_ping > 0 ? `均單 ${fmtAvgUnitWan(stats.avg_unit_price_ping)}` : '', stats.avg_ping > 0 ? `均面積 ${fmtAvgArea(stats.avg_ping)}` : '', stats.avg_ratio > 0 ? `公設 ${stats.avg_ratio.toFixed(0)}%` : ''].filter(Boolean) : [];
     html += `<div class="community-header" onclick="toggleCommunity(this,'${escAttr(cn)}')" onmouseenter="hoverCommunity('${escAttr(cn)}')" onmouseleave="unhoverCommunity()">
       <span class="ch-arrow ${isCollapsed ? '' : 'open'}">▶</span>
       <div style="flex:1;min-width:0"><div class="ch-name">${escHtml(cn)}</div>
@@ -385,8 +415,8 @@ function renderResults() {
       html += `<div class="community-stats" id="cstats-${cssId(cn)}" style="${isCollapsed ? 'display:none' : ''}">
         <div class="cs-item"><span class="cs-label">📊 筆數</span><span class="cs-value">${group.items.length}</span></div>
         <div class="cs-item"><span class="cs-label">💰 均總</span><span class="cs-value">${fmtWan(stats.avg_price)}</span></div>
-        <div class="cs-item"><span class="cs-label"> 均單</span><span class="cs-value">${stats.avg_unit_price_ping > 0 ? (stats.avg_unit_price_ping / 10000).toFixed(1) + '萬/坪' : '-'}</span></div>
-        <div class="cs-item"><span class="cs-label">📐 均坪</span><span class="cs-value">${stats.avg_ping > 0 ? stats.avg_ping.toFixed(1) + '坪' : '-'}</span></div>
+        <div class="cs-item"><span class="cs-label"> 均單</span><span class="cs-value">${fmtAvgUnitWan(stats.avg_unit_price_ping)}</span></div>
+        <div class="cs-item"><span class="cs-label">📐 均面積</span><span class="cs-value">${fmtAvgArea(stats.avg_ping)}</span></div>
         <div class="cs-item"><span class="cs-label">🏗️ 公設</span><span class="cs-value" style="color:${stats.avg_ratio > 35 ? 'var(--red)' : stats.avg_ratio > 30 ? 'var(--orange)' : 'var(--green)'}">${stats.avg_ratio > 0 ? stats.avg_ratio.toFixed(1) + '%' : '-'}</span></div>
       </div>`;
     }
@@ -470,7 +500,7 @@ function renderSummary() {
   const maxUp = fmtUnitPrice(s.max_unit_price_ping);
   const comCount = Object.keys(communitySummaries).length;
   const comInfo = comCount > 0 ? ` ｜ <span class="val">${comCount}</span> 個建案` : '';
-  bar.innerHTML = `共 <span class="val">${s.total}</span> 筆${comInfo} ｜ 均價 <span class="val">${fmtWan(s.avg_price)}</span> ｜ 均坪 <span class="val">${s.avg_ping}坪</span> ｜ 單價 <span class="val">${avgUp}</span><br>單價區間 <span class="val">${minUp}</span> ~ <span class="val">${maxUp}</span> ｜ 均公設 <span class="val">${s.avg_ratio || '-'}%</span>`;
+  bar.innerHTML = `共 <span class="val">${s.total}</span> 筆${comInfo} ｜ 均價 <span class="val">${fmtWan(s.avg_price)}</span> ｜ 均面積 <span class="val">${fmtAvgArea(s.avg_ping)}</span> ｜ 單價 <span class="val">${avgUp}</span><br>單價區間 <span class="val">${minUp}</span> ~ <span class="val">${maxUp}</span> ｜ 均公設 <span class="val">${s.avg_ratio || '-'}%</span>`;
 }
 
 // ══════════════════════════════════════════════════════════
@@ -758,7 +788,7 @@ function showMarkerTooltip(marker, group) {
   tip.innerHTML = `${label ? `<div class="mti-name">${escHtml(label)}</div>` : ''}
     <div class="mti-row"><span>📅</span> ${yearRange}年 ｜ 完工 ${buildDateText}</div>
     ${maxFloor > 0 ? `<div class="mti-row"><span>🏢</span> ${maxFloor}樓 ｜ ${escHtml(typeText)} ${escHtml(materialText)}</div>` : `<div class="mti-row"><span>🏠</span> ${escHtml(typeText)} ${escHtml(materialText)}</div>`}
-    <div class="mti-row"><span>📐</span> 均${avgPing}坪</div>`;
+    <div class="mti-row"><span>📐</span> 均${fmtAvgArea(parseFloat(avgPing))}</div>`;
   const iconRect = marker._icon.getBoundingClientRect();
   tip.style.position = 'fixed'; tip.style.left = (iconRect.left + iconRect.width / 2) + 'px';
   tip.style.top = (iconRect.top - 8) + 'px'; tip.style.zIndex = '2000';
@@ -782,16 +812,20 @@ function updateLegend() {
       }
     }
     matrixHtml += '</div>';
+    const unitLabel = markerSettings.areaUnit === 'sqm' ? '萬/m²' : '萬/坪';
+    const unitShort = markerSettings.areaUnit === 'sqm' ? '單價/m²' : '單價/坪';
     legendContent = `<div style="font-weight:700;margin-bottom:4px;font-size:12px">🎨 雙變數色彩圖例</div>
-      <div style="font-size:10px;color:var(--text2)">→ 單價/坪（青色）<br>↑ 總價（洋紅）</div>
+      <div style="font-size:10px;color:var(--text2)">→ ${unitShort}（青色）<br>↑ 總價（洋紅）</div>
       ${matrixHtml}
-      <div style="font-size:9px;color:var(--text3)">單價: ≤${q[0]}|${q[0]}-${q[1]}|${q[1]}-${q[2]}|>${q[2]}萬/坪<br>總價: ≤${tq[0]}|${tq[0]}-${tq[1]}|${tq[1]}-${tq[2]}|>${tq[2]}萬</div>`;
+      <div style="font-size:9px;color:var(--text3)">單價: ≤${q[0]}|${q[0]}-${q[1]}|${q[1]}-${q[2]}|>${q[2]}${unitLabel}<br>總價: ≤${tq[0]}|${tq[0]}-${tq[1]}|${tq[1]}-${tq[2]}|>${tq[2]}萬</div>`;
   } else {
+    const unitShort = markerSettings.areaUnit === 'sqm' ? '單價/m²' : '單價/坪';
+    const unitLabel = markerSettings.areaUnit === 'sqm' ? '萬/m²' : '萬/坪';
     legendContent = `<div style="font-weight:700;margin-bottom:4px;font-size:12px">🎯 雙圈色彩圖例</div>
-      <div style="font-weight:600;font-size:10px;color:var(--primary);margin-bottom:2px">● 外環＝${markerSettings.outerMode === 'unit_price' ? '單價/坪' : '總價'} ｜ ● 內圈＝${markerSettings.innerMode === 'unit_price' ? '單價/坪' : '總價'}</div>
+      <div style="font-weight:600;font-size:10px;color:var(--primary);margin-bottom:2px">● 外環＝${markerSettings.outerMode === 'unit_price' ? unitShort : '總價'} ｜ ● 內圈＝${markerSettings.innerMode === 'unit_price' ? unitShort : '總價'}</div>
       <div style="display:flex;align-items:center;gap:4px;font-size:10px"><div style="width:12px;height:12px;border-radius:50%;background:linear-gradient(135deg,hsl(155,55%,38%),hsl(60,60%,42%))"></div><span>低→中（綠→黃）</span></div>
       <div style="display:flex;align-items:center;gap:4px;font-size:10px"><div style="width:12px;height:12px;border-radius:50%;background:linear-gradient(135deg,hsl(60,60%,42%),hsl(0,65%,48%))"></div><span>中→高（黃→紅）</span></div>
-      <div style="font-size:9px;color:var(--text3);margin-top:2px">單價: ${markerSettings.unitThresholds[0]}~${markerSettings.unitThresholds[2]}萬/坪<br>總價: ${markerSettings.totalThresholds[0]}~${markerSettings.totalThresholds[2]}萬</div>`;
+      <div style="font-size:9px;color:var(--text3);margin-top:2px">單價: ${markerSettings.unitThresholds[0]}~${markerSettings.unitThresholds[2]}${unitLabel}<br>總價: ${markerSettings.totalThresholds[0]}~${markerSettings.totalThresholds[2]}萬</div>`;
   }
 
   _legendDiv.innerHTML = `<div style="background:#fff;padding:10px 12px;border-radius:var(--radius);box-shadow:var(--shadow-md);font-size:11px;line-height:1.7;min-width:160px;border:1px solid var(--border)">
@@ -895,6 +929,7 @@ function applySettings() {
   markerSettings.contentMode = document.getElementById('sContent') ? document.getElementById('sContent').value : 'recent2yr';
   markerSettings.osmZoom = parseInt(document.getElementById('sOsmZoom').value, 10) || 16;
   markerSettings.bubbleMode = document.getElementById('sBubbleMode').value;
+  markerSettings.areaUnit = document.getElementById('sAreaUnit') ? document.getElementById('sAreaUnit').value : 'ping';
 
   // Bivariate thresholds
   const bq1 = parseInt(document.getElementById('bivUnitQ1').value, 10);
@@ -921,6 +956,7 @@ function loadSettings() {
   if (!markerSettings.bivUnitQ || markerSettings.bivUnitQ.length !== 3) markerSettings.bivUnitQ = [25, 40, 60];
   if (!markerSettings.bivTotalQ || markerSettings.bivTotalQ.length !== 3) markerSettings.bivTotalQ = [800, 1500, 2500];
   if (!markerSettings.bubbleMode) markerSettings.bubbleMode = 'dual_ring';
+  if (!markerSettings.areaUnit) markerSettings.areaUnit = 'ping';
 
   document.getElementById('sOuter').value = markerSettings.outerMode || 'unit_price';
   document.getElementById('sInner').value = markerSettings.innerMode || 'total_price';
@@ -928,6 +964,7 @@ function loadSettings() {
   if (document.getElementById('sYearFormat')) document.getElementById('sYearFormat').value = markerSettings.yearFormat || 'roc';
   if (document.getElementById('sContent')) document.getElementById('sContent').value = markerSettings.contentMode || 'recent2yr';
   if (document.getElementById('sOsmZoom')) document.getElementById('sOsmZoom').value = markerSettings.osmZoom || 16;
+  if (document.getElementById('sAreaUnit')) document.getElementById('sAreaUnit').value = markerSettings.areaUnit || 'ping';
   document.getElementById('sBubbleMode').value = markerSettings.bubbleMode;
   document.getElementById('dualRingSettings').style.display = markerSettings.bubbleMode === 'dual_ring' ? '' : 'none';
   document.getElementById('bivariateSettings').style.display = markerSettings.bubbleMode === 'bivariate' ? '' : 'none';

@@ -168,7 +168,14 @@
     </div>
 
     <div class="settings-group">
-      <div class="settings-group-title">📊 價格計算方式</div>
+      <div class="settings-group-title">� 面積/單價單位</div>
+      <select id="sAreaUnit" onchange="applySettings()">
+        <option value="ping">坪 (萬/坪)</option>
+        <option value="sqm">平方公尺 (萬/m²)</option>
+      </select>
+    </div>
+    <div class="settings-group">
+      <div class="settings-group-title">�📊 價格計算方式</div>
       <select id="sContent" onchange="applySettings()">
         <option value="recent2yr">近兩年均價(排除特殊)</option>
         <option value="all">全期間均價</option>
