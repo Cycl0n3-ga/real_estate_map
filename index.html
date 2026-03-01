@@ -28,7 +28,9 @@
   <!-- ═══ NAVBAR ═══ -->
   <nav class="navbar" id="navbar">
     <div class="nav-left">
-      <button class="hamburger" id="hamburgerBtn" onclick="toggleSidebar()" title="展開/收合側欄">☰</button>
+      <button class="hamburger" id="hamburgerBtn" onclick="toggleSidebar()" title="展開/收合側欄">
+        ☰ <span style="font-size:12px; font-weight:600; vertical-align:middle;">列表</span>
+      </button>
       <div class="nav-logo">🏢 良富居</div>
       <div class="nav-search autocomplete-wrap" id="navSearch">
         <input id="searchInput" type="text" placeholder="搜尋地址 / 建案名稱…"
@@ -88,14 +90,11 @@
   <!-- ═══ SETTINGS PANEL ═══ -->
   <div class="settings-overlay" id="settingsOverlay" onclick="toggleSettings()"></div>
   <div class="settings-panel" id="settingsPanel">
-    <h3>⚙️ 顯示設定</h3>
-
-    <div class="settings-group">
-      <div class="settings-group-title">🌙 主題模式</div>
-      <select id="sThemeMode" onchange="applySettings()">
-        <option value="light">淺色模式 (Light)</option>
-        <option value="dark">深色模式 (Dark)</option>
-      </select>
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+      <h3 style="margin:0;">⚙️ 顯示設定</h3>
+      <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:12px;font-weight:600;background:var(--bg2);padding:4px 10px;border-radius:12px;border:1px solid var(--border)">
+        <input type="checkbox" id="sThemeToggle" onchange="applySettings()" style="margin:0"> 🌙 深色模式
+      </label>
     </div>
 
     <div class="settings-group">
@@ -144,27 +143,8 @@
     <!-- 雙變數色彩模式設定 -->
     <div id="bivariateSettings" style="display:none">
       <div class="settings-group">
-        <div class="settings-group-title">🟦 單價四等份（X 軸 · 青色）</div>
-        <div class="biv-range-row">
-          <label>Q1</label><input type="number" id="bivUnitQ1" value="25" class="biv-input" onchange="applySettings()">
-          <label>Q2</label><input type="number" id="bivUnitQ2" value="40" class="biv-input" onchange="applySettings()">
-          <label>Q3</label><input type="number" id="bivUnitQ3" value="60" class="biv-input" onchange="applySettings()">
-        </div>
-        <div class="biv-hint">萬/坪：≤Q1 | Q1~Q2 | Q2~Q3 | >Q3</div>
-
-        <div class="settings-group-title" style="margin-top:12px">🟪 總價四等份（Y 軸 · 洋紅）</div>
-        <div class="biv-range-row">
-          <label>Q1</label><input type="number" id="bivTotalQ1" value="800" class="biv-input"
-            onchange="applySettings()">
-          <label>Q2</label><input type="number" id="bivTotalQ2" value="1500" class="biv-input"
-            onchange="applySettings()">
-          <label>Q3</label><input type="number" id="bivTotalQ3" value="2500" class="biv-input"
-            onchange="applySettings()">
-        </div>
-        <div class="biv-hint">萬：≤Q1 | Q1~Q2 | Q2~Q3 | >Q3</div>
-      </div>
-      <div class="settings-group">
-        <div class="settings-group-title">📊 4×4 矩陣色盤預覽</div>
+        <div class="settings-group-title" style="margin-bottom:4px">🎨 雙變數預設色盤</div>
+        <div class="biv-hint">系統自動以固定四等份劃分：<br>單價 (X): 25, 40, 60 萬/坪<br>總價 (Y): 800, 1500, 2500 萬</div>
         <div id="bivMatrixPreview" class="biv-matrix"></div>
       </div>
     </div>
@@ -197,11 +177,12 @@
       </select>
     </div>
     <div class="settings-group">
-      <div class="settings-group-title">📍 自動精確定位</div>
-      <label style="margin-top:4px;font-size:11px;display:flex;align-items:center;gap:4px">
-        <input type="number" id="sOsmZoom" value="16" min="13" max="19" style="width:50px"
-          onchange="applySettings()"> 級以上使用精確定位
-      </label>
+      <div class="settings-group-title">📍 自動精確定位層級</div>
+      <select id="sOsmZoom" onchange="applySettings()">
+        <option value="15">15級 (較大範圍)</option>
+        <option value="16">16級 (適中 - 預設)</option>
+        <option value="17">17級 (精細範圍)</option>
+      </select>
     </div>
   </div>
 

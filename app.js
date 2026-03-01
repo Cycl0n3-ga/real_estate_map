@@ -29,7 +29,7 @@ let markerSettings = {
   // Bivariate thresholds
   bivUnitQ: [25, 40, 60], bivTotalQ: [800, 1500, 2500],
 };
-let areaAutoSearch = false;
+let areaAutoSearch = true;
 let _areaSearchTimer = null;
 let _hoverPanSuppressed = false;
 let _sidebarCollapsed = false;
@@ -348,7 +348,7 @@ async function doAreaSearch() {
       markerGroup.clearLayers(); return;
     }
     handleSearchResult(data, false);
-  } catch (e) { results.innerHTML = '<div class="empty">❌ 搜此區域失敗: ' + e.message + '</div>'; }
+  } catch (e) { results.innerHTML = '<div class="empty">❌ 網路連線異常，請稍後再試</div>'; }
 }
 
 function handleSearchResult(data, fitBounds = true) {
@@ -790,19 +790,27 @@ function updateLegend() {
   if (markerSettings.bubbleMode === 'bivariate') {
     // Bivariate legend: mini 4x4 matrix
     const q = markerSettings.bivUnitQ, tq = markerSettings.bivTotalQ;
-    let matrixHtml = '<div style="display:grid;grid-template-columns:repeat(4,20px);gap:2px;margin:4px 0">';
+    let matrixHtml = '<div style="display:grid;grid-template-columns:repeat(4,24px);gap:3px;margin:6px 0">';
     for (let yi = 3; yi >= 0; yi--) {
       for (let xi = 0; xi < 4; xi++) {
-        matrixHtml += `<div style="width:20px;height:20px;border-radius:3px;background:${BIVARIATE_MATRIX[xi][yi]}"></div>`;
+        matrixHtml += `<div style="width:24px;height:24px;border-radius:4px;background:${BIVARIATE_MATRIX[xi][yi]}"></div>`;
       }
     }
     matrixHtml += '</div>';
     const unitLabel = markerSettings.areaUnit === 'sqm' ? '萬/m²' : '萬/坪';
     const unitShort = markerSettings.areaUnit === 'sqm' ? '單價/m²' : '單價/坪';
-    legendContent = `<div style="font-weight:700;margin-bottom:4px;font-size:12px">🎨 雙變數色彩圖例</div>
-      <div style="font-size:10px;color:var(--text2)">→ ${unitShort}（青色）<br>↑ 總價（洋紅）</div>
-      ${matrixHtml}
-      <div style="font-size:9px;color:var(--text3)">單價: ≤${q[0]}|${q[0]}-${q[1]}|${q[1]}-${q[2]}|>${q[2]}${unitLabel}<br>總價: ≤${tq[0]}|${tq[0]}-${tq[1]}|${tq[1]}-${tq[2]}|>${tq[2]}萬</div>`;
+    legendContent = `<div style="font-weight:700;margin-bottom:6px;font-size:13px">🎨 雙變數色彩圖例</div>
+      <div style="font-size:11px;color:var(--text2);line-height:1.5">
+        <span style="display:inline-block;width:10px;height:10px;background:#6bc5d2;border-radius:2px;margin-right:4px"></span>水平(X)：${unitShort}越高越青<br>
+        <span style="display:inline-block;width:10px;height:10px;background:#c085be;border-radius:2px;margin-right:4px"></span>垂直(Y)：總價越高越洋紅
+      </div>
+      <div style="display:flex;align-items:center;gap:12px">
+        ${matrixHtml}
+      </div>
+      <div style="font-size:10px;color:var(--text3);margin-top:4px;line-height:1.6">
+        單價: ≤${q[0]} | ${q[0]}-${q[1]} | ${q[1]}-${q[2]} | >${q[2]} ${unitLabel}<br>
+        總價: ≤${tq[0]} | ${tq[0]}-${tq[1]} | ${tq[1]}-${tq[2]} | >${tq[2]} 萬
+      </div>`;
   } else {
     const unitShort = markerSettings.areaUnit === 'sqm' ? '單價/m²' : '單價/坪';
     const unitLabel = markerSettings.areaUnit === 'sqm' ? '萬/m²' : '萬/坪';
@@ -914,21 +922,15 @@ function applySettings() {
   markerSettings.osmZoom = parseInt(document.getElementById('sOsmZoom').value, 10) || 16;
   markerSettings.bubbleMode = document.getElementById('sBubbleMode').value;
   markerSettings.areaUnit = document.getElementById('sAreaUnit') ? document.getElementById('sAreaUnit').value : 'ping';
-  if (document.getElementById('sThemeMode')) {
-    markerSettings.themeMode = document.getElementById('sThemeMode').value;
+  if (document.getElementById('sThemeToggle')) {
+    markerSettings.themeMode = document.getElementById('sThemeToggle').checked ? 'dark' : 'light';
     if (markerSettings.themeMode === 'dark') document.body.classList.add('dark-mode');
     else document.body.classList.remove('dark-mode');
   }
 
-  // Bivariate thresholds
-  const bq1 = parseInt(document.getElementById('bivUnitQ1').value, 10);
-  const bq2 = parseInt(document.getElementById('bivUnitQ2').value, 10);
-  const bq3 = parseInt(document.getElementById('bivUnitQ3').value, 10);
-  if (bq1 > 0 && bq2 > bq1 && bq3 > bq2) markerSettings.bivUnitQ = [bq1, bq2, bq3];
-  const btq1 = parseInt(document.getElementById('bivTotalQ1').value, 10);
-  const btq2 = parseInt(document.getElementById('bivTotalQ2').value, 10);
-  const btq3 = parseInt(document.getElementById('bivTotalQ3').value, 10);
-  if (btq1 > 0 && btq2 > btq1 && btq3 > btq2) markerSettings.bivTotalQ = [btq1, btq2, btq3];
+  // Bivariate thresholds uses defaults
+  markerSettings.bivUnitQ = [25, 40, 60];
+  markerSettings.bivTotalQ = [800, 1500, 2500];
 
   localStorage.setItem('markerSettings', JSON.stringify(markerSettings));
   updateLegend();
@@ -948,8 +950,8 @@ function loadSettings() {
   if (!markerSettings.areaUnit) markerSettings.areaUnit = 'ping';
   if (!markerSettings.themeMode) markerSettings.themeMode = 'light';
 
-  if (document.getElementById('sThemeMode')) {
-    document.getElementById('sThemeMode').value = markerSettings.themeMode;
+  if (document.getElementById('sThemeToggle')) {
+    document.getElementById('sThemeToggle').checked = markerSettings.themeMode === 'dark';
     if (markerSettings.themeMode === 'dark') document.body.classList.add('dark-mode');
     else document.body.classList.remove('dark-mode');
   }
@@ -964,14 +966,6 @@ function loadSettings() {
   document.getElementById('sBubbleMode').value = markerSettings.bubbleMode;
   document.getElementById('dualRingSettings').style.display = markerSettings.bubbleMode === 'dual_ring' ? '' : 'none';
   document.getElementById('bivariateSettings').style.display = markerSettings.bubbleMode === 'bivariate' ? '' : 'none';
-
-  // Bivariate thresholds
-  document.getElementById('bivUnitQ1').value = markerSettings.bivUnitQ[0];
-  document.getElementById('bivUnitQ2').value = markerSettings.bivUnitQ[1];
-  document.getElementById('bivUnitQ3').value = markerSettings.bivUnitQ[2];
-  document.getElementById('bivTotalQ1').value = markerSettings.bivTotalQ[0];
-  document.getElementById('bivTotalQ2').value = markerSettings.bivTotalQ[1];
-  document.getElementById('bivTotalQ3').value = markerSettings.bivTotalQ[2];
 
   const ut = markerSettings.unitThresholds, tt = markerSettings.totalThresholds;
   document.getElementById('unitMin').value = ut[0]; document.getElementById('unitMax').value = ut[2];

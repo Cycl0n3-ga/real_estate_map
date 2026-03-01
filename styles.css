@@ -368,17 +368,10 @@ html, body {
 .map-wrap { position:fixed; top:var(--navbar-h); bottom:0; left:0; right:0; }
 #map { width:100%; height:100%; }
 
-#map.spiderfied-active .leaflet-tile-pane,
-#map.spiderfied-active .leaflet-overlay-pane {
-  filter:blur(3px) brightness(0.6); transition:all .3s ease;
-}
-#map.spiderfied-active .leaflet-marker-icon:not(.spider-focus) {
-  opacity:.2; filter:blur(2px) grayscale(.8); transition:all .3s ease; pointer-events:none;
-}
 .leaflet-marker-icon { transition:opacity .3s, filter .3s; }
 
 .map-controls {
-  position:absolute; bottom:30px; right:14px; z-index:900;
+  position:absolute; bottom:30px; right:14px; z-index:1150;
   display:flex; flex-direction:column; gap:6px;
 }
 .map-controls button {
@@ -544,6 +537,11 @@ html, body {
 .autocomplete-item .ac-tag.fuzzy { background:rgba(217,119,6,.06); color:var(--orange); }
 
 /* ════════ Dark Mode overrides ════════ */
+body.dark-mode .leaflet-tile-pane,
+body.dark-mode .leaflet-overlay-pane {
+  filter: invert(100%) hue-rotate(180deg) brightness(95%) contrast(90%);
+}
+
 body.dark-mode {
   --bg: #0f172a;
   --bg2: #1e293b;
@@ -593,6 +591,19 @@ body.dark-mode .community-header {
 }
 body.dark-mode .community-stats {
   background: var(--green-bg);
+}
+body.dark-mode .cluster-list-header {
+  background: rgba(217, 119, 6, 0.15);
+  border-bottom: 2px solid rgba(217, 119, 6, 0.3);
+}
+body.dark-mode .cluster-list-header span {
+  color: #fb923c;
+}
+body.dark-mode .cluster-list-header button {
+  color: var(--primary-light);
+}
+body.dark-mode .cluster-list-header button:hover {
+  background: rgba(59, 130, 246, 0.15);
 }
 body.dark-mode .autocomplete-item:hover,
 body.dark-mode .autocomplete-item.selected {
