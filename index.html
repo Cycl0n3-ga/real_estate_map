@@ -29,15 +29,16 @@
   <nav class="navbar" id="navbar">
     <div class="nav-left">
       <div class="nav-logo">🏢 良富居</div>
-      <button class="hamburger" id="hamburgerBtn" onclick="toggleSidebar()" title="展開/收合側欄">
-        <span id="hamburgerIcon">✕</span> <span id="hamburgerText" style="font-size:12px; font-weight:600; vertical-align:middle;">列表</span>
-      </button>
+      <button class="hamburger" id="hamburgerBtn" onclick="toggleSidebar()" title="展開/收合側欄">☰</button>
       <div class="nav-search autocomplete-wrap" id="navSearch">
         <input id="searchInput" type="text" placeholder="搜尋地址 / 建案名稱…"
           onkeydown="handleSearchKeydown(event)" oninput="onSearchInput()" autocomplete="off">
         <button class="nav-search-btn" onclick="doSearch()">搜尋</button>
         <div class="autocomplete-list" id="acList"></div>
       </div>
+    </div>
+    <div class="nav-right">
+      <button class="nav-icon-btn" id="settingsBtn" onclick="toggleSettings()" title="設定">⚙️</button>
     </div>
   </nav>
 
@@ -194,10 +195,7 @@
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" />
         </svg>
-        <span class="filter-label">篩選條件</span>
-      </button>
-      <button class="nav-icon-btn" id="settingsBtn" onclick="toggleSettings()" title="設定" style="width:auto; padding:0 12px; font-size:13px; font-weight:600; color:var(--text2);">
-        ⚙️ 設定
+        <span class="filter-label">篩選</span>
       </button>
     </div>
 

@@ -33,6 +33,7 @@ let areaAutoSearch = true;
 let _areaSearchTimer = null;
 let _hoverPanSuppressed = false;
 let _sidebarCollapsed = false;
+let _isHoveringList = false;
 
 // ── Utility ──
 const escHtml = s => s ? String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;') : '';
@@ -73,17 +74,6 @@ function isLotAddress(addr) { return /^\S*段\S*地號/.test(addr) || /段\d+地
 function getLocationMode() { const z = map ? map.getZoom() : 15; return z >= (markerSettings.osmZoom || 16) ? 'osm' : 'db'; }
 
 // ── Sidebar toggle ──
-function updateHamburgerBtn() {
-  const icon = document.getElementById('hamburgerIcon');
-  if (!icon) return;
-
-  if (_sidebarCollapsed) {
-    icon.textContent = '☰';
-  } else {
-    icon.textContent = '✕';
-  }
-}
-
 function toggleSidebar() {
   const sidebar = document.getElementById('sidebar');
   if (_sidebarCollapsed) {
@@ -99,10 +89,8 @@ function toggleSidebar() {
       _sidebarCollapsed = !sidebar.classList.contains('show');
     } else {
       collapseSidebar();
-      return; // collapseSidebar updates the button
     }
   }
-  updateHamburgerBtn();
 }
 
 function collapseSidebar() {
@@ -110,7 +98,6 @@ function collapseSidebar() {
   sidebar.classList.add('collapsed');
   sidebar.classList.remove('show');
   _sidebarCollapsed = true;
-  updateHamburgerBtn();
 }
 
 // ── Filter panel ──
@@ -131,10 +118,8 @@ function updateFilterBtnState() {
 
   if (hasFilter) {
     btn.classList.add('active');
-    btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" /></svg> <span class="filter-label">篩選已套用</span>';
   } else {
     btn.classList.remove('active');
-    btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" /></svg> <span class="filter-label">篩選條件</span>';
   }
 }
 
@@ -353,7 +338,7 @@ function unhoverCommunity() {
 // ── Search ──
 async function doSearch() {
   const kw = document.getElementById('searchInput').value.trim();
-  if (!kw) { alert('請輸入搜尋關鍵字'); return; }
+  if (!kw && !getFilterParams() && !_selectedCommunity) { alert('請輸入搜尋關鍵字或選擇篩選條件'); return; }
   hideAcList(); lastSearchType = 'keyword';
   const results = document.getElementById('results');
   results.innerHTML = '<div class="loading"><div class="skeleton" style="height:60px;margin:16px"></div><div class="skeleton" style="height:60px;margin:16px"></div></div>';
@@ -431,7 +416,7 @@ function renderResults() {
     const stats = communitySummaries[cn] || computeLocalStats(group.items);
     html += `<div class="community-group">`;
     const inlineStats = stats ? [stats.avg_unit_price_ping > 0 ? `均單 ${fmtAvgUnitWan(stats.avg_unit_price_ping)}` : '', stats.avg_ping > 0 ? `均面積 ${fmtAvgArea(stats.avg_ping)}` : '', stats.avg_ratio > 0 ? `公設 ${stats.avg_ratio.toFixed(0)}%` : ''].filter(Boolean) : [];
-    html += `<div class="community-header" onclick="toggleCommunity(this,'${escAttr(cn)}')" onmouseenter="hoverCommunity('${escAttr(cn)}')" onmouseleave="unhoverCommunity()">
+    html += `<div class="community-header" onclick="toggleCommunity(this,'${escAttr(cn)}')" onmouseenter="_isHoveringList=true; hoverCommunity('${escAttr(cn)}')" onmouseleave="_isHoveringList=false; unhoverCommunity()">
       <span class="ch-arrow ${isCollapsed ? '' : 'open'}">▶</span>
       <div style="flex:1;min-width:0"><div class="ch-name">${escHtml(cn)}</div>
       ${inlineStats.length ? `<div class="ch-stats-inline">${inlineStats.map(s => `<span>${s}</span>`).join('')}</div>` : ''}</div>
@@ -480,7 +465,7 @@ function renderTxCard(tx, idx) {
   const specialBadge = tx.is_special ? '<span class="special-badge">特殊</span>' : '';
   const parkingTag = tx.has_parking ? `<span class="tx-parking-tag">🚗 含車位${tx.parking_price > 0 ? ' ' + fmtWan(tx.parking_price) : ''}</span>` : '';
 
-  return `<div class="tx-card${isActive ? ' active' : ''}${priceClass}${tx.is_special ? ' special' : ''}" onclick="selectTx(${idx})" onmouseenter="hoverTx(${idx})" onmouseleave="unhoverTx()" data-idx="${idx}">
+  return `<div class="tx-card${isActive ? ' active' : ''}${priceClass}${tx.is_special ? ' special' : ''}" onclick="selectTx(${idx})" onmouseenter="_isHoveringList=true; hoverTx(${idx})" onmouseleave="_isHoveringList=false; unhoverTx()" data-idx="${idx}">
     ${colorDot}
     <div class="tx-price-col"><div class="tx-price">${fmtWan(tx.price)}</div><div class="tx-unit">${fmtUnitPrice(tx.unit_price_ping)}</div></div>
     <div class="tx-addr" title="${escAttr(tx.address)}">${escHtml(tx.address)}${specialBadge}</div>
@@ -865,9 +850,9 @@ function updateLegend() {
       </div>`;
   }
 
-  _legendDiv.innerHTML = `<div style="background:var(--glass);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);padding:12px;border-radius:var(--radius-lg);box-shadow:var(--shadow-md);font-size:11px;min-width:150px;border:1px solid var(--glass-border)">
+  _legendDiv.innerHTML = `<div style="background:var(--glass);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);padding:12px;border-radius:var(--radius-lg);box-shadow:var(--shadow-md);font-size:11px;min-width:150px;max-width:55vw;pointer-events:none;border:1px solid var(--glass-border)">
     ${legendContent}
-    <div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border);display:flex;justify-content:flex-start;align-items:center;">
+    <div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border);display:flex;justify-content:flex-start;align-items:center;pointer-events:auto;">
       <div class="area-toggle-wrap">
         <label class="area-toggle"><input type="checkbox" id="areaToggle" ${areaAutoSearch ? 'checked' : ''} onchange="toggleAreaAutoSearch(this.checked)"><span class="area-toggle-slider"></span></label>
         <span class="area-toggle-label">自動顯示建案</span>
@@ -1026,7 +1011,7 @@ function toggleAreaAutoSearch(on) {
   if (on && map && map.getZoom() >= (markerSettings.osmZoom || 16)) doAreaSearch();
 }
 function onMapMoveEnd() {
-  if (!areaAutoSearch || _hoverPanSuppressed) return;
+  if (_isHoveringList || !areaAutoSearch || _hoverPanSuppressed) return;
   if (map.getZoom() < (markerSettings.osmZoom || 16)) return;
   clearTimeout(_areaSearchTimer);
   _areaSearchTimer = setTimeout(() => {

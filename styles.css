@@ -368,13 +368,14 @@ html, body {
 .map-wrap { position:fixed; top:var(--navbar-h); bottom:0; left:0; right:0; }
 #map { width:100%; height:100%; }
 
-#map.spiderfied-active:not(.hover-unblur) .leaflet-tile-pane,
-#map.spiderfied-active:not(.hover-unblur) .leaflet-overlay-pane {
-  filter:blur(3px) brightness(0.6); transition:all .3s ease;
-}
-#map.spiderfied-active:not(.hover-unblur) .leaflet-marker-icon:not(.spider-focus) {
-  opacity:.2; filter:blur(2px) grayscale(.8); transition:all .3s ease; pointer-events:none;
-}
+#map.spiderfied-active .leaflet-tile-pane,
+#map.spiderfied-active .leaflet-overlay-pane { filter:blur(3px) brightness(0.6); transition:all .3s ease; }
+#map.spiderfied-active .leaflet-marker-icon:not(.spider-focus) { opacity:.2; filter:blur(2px) grayscale(.8); transition:all .3s ease; pointer-events:none; }
+
+#map.spiderfied-active.hover-unblur .leaflet-tile-pane,
+#map.spiderfied-active.hover-unblur .leaflet-overlay-pane { filter:none !important; }
+#map.spiderfied-active.hover-unblur .leaflet-marker-icon:not(.spider-focus) { filter:none !important; opacity:1 !important; }
+
 .leaflet-marker-icon { transition:opacity .3s, filter .3s; }
 
 .map-controls {
