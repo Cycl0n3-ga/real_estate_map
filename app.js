@@ -416,7 +416,7 @@ function renderResults() {
     const stats = communitySummaries[cn] || computeLocalStats(group.items);
     html += `<div class="community-group">`;
     const inlineStats = stats ? [stats.avg_unit_price_ping > 0 ? `均單 ${fmtAvgUnitWan(stats.avg_unit_price_ping)}` : '', stats.avg_ping > 0 ? `均面積 ${fmtAvgArea(stats.avg_ping)}` : '', stats.avg_ratio > 0 ? `公設 ${stats.avg_ratio.toFixed(0)}%` : ''].filter(Boolean) : [];
-    html += `<div class="community-header" onclick="toggleCommunity(this,'${escAttr(cn)}')" onmouseenter="_isHoveringList=true; hoverCommunity('${escAttr(cn)}')" onmouseleave="_isHoveringList=false; unhoverCommunity()">
+    html += `<div class="community-header" onclick="toggleCommunity(this,'${escAttr(cn)}')" onmouseenter="hoverCommunity('${escAttr(cn)}')" onmouseleave="unhoverCommunity()">
       <span class="ch-arrow ${isCollapsed ? '' : 'open'}">▶</span>
       <div style="flex:1;min-width:0"><div class="ch-name">${escHtml(cn)}</div>
       ${inlineStats.length ? `<div class="ch-stats-inline">${inlineStats.map(s => `<span>${s}</span>`).join('')}</div>` : ''}</div>
@@ -465,7 +465,7 @@ function renderTxCard(tx, idx) {
   const specialBadge = tx.is_special ? '<span class="special-badge">特殊</span>' : '';
   const parkingTag = tx.has_parking ? `<span class="tx-parking-tag">🚗 含車位${tx.parking_price > 0 ? ' ' + fmtWan(tx.parking_price) : ''}</span>` : '';
 
-  return `<div class="tx-card${isActive ? ' active' : ''}${priceClass}${tx.is_special ? ' special' : ''}" onclick="selectTx(${idx})" onmouseenter="_isHoveringList=true; hoverTx(${idx})" onmouseleave="_isHoveringList=false; unhoverTx()" data-idx="${idx}">
+  return `<div class="tx-card${isActive ? ' active' : ''}${priceClass}${tx.is_special ? ' special' : ''}" onclick="selectTx(${idx})" onmouseenter="hoverTx(${idx})" onmouseleave="unhoverTx()" data-idx="${idx}">
     ${colorDot}
     <div class="tx-price-col"><div class="tx-price">${fmtWan(tx.price)}</div><div class="tx-unit">${fmtUnitPrice(tx.unit_price_ping)}</div></div>
     <div class="tx-addr" title="${escAttr(tx.address)}">${escHtml(tx.address)}${specialBadge}</div>
@@ -731,9 +731,20 @@ function plotMarkers(fitBounds = true) {
 }
 
 function selectTx(idx) {
-  activeCardIdx = idx; renderResults();
+  activeCardIdx = idx;
+  document.querySelectorAll('.tx-card').forEach(card => {
+    if (parseInt(card.dataset.idx, 10) === idx) {
+      card.classList.add('active');
+    } else {
+      card.classList.remove('active');
+    }
+  });
   const tx = txData[idx];
-  if (tx && tx.lat && tx.lng) { map.setView([tx.lat, tx.lng], 17); }
+  if (tx && tx.lat && tx.lng) {
+    _hoverPanSuppressed = true;
+    map.setView([tx.lat, tx.lng], 17);
+    setTimeout(() => { _hoverPanSuppressed = false; }, 800);
+  }
 }
 
 // ── Marker tooltip ──
@@ -1028,6 +1039,13 @@ document.addEventListener('keydown', e => {
 // ── Init ──
 document.addEventListener('DOMContentLoaded', () => {
   loadSettings(); initMap();
+
+  const sidebarEl = document.getElementById('sidebar');
+  if (sidebarEl) {
+    sidebarEl.addEventListener('mouseenter', () => { _isHoveringList = true; });
+    sidebarEl.addEventListener('mouseleave', () => { _isHoveringList = false; });
+  }
+
   try {
     const saved = localStorage.getItem('areaAutoSearch');
     if (saved === '1') { areaAutoSearch = true; const cb = document.getElementById('areaToggle'); if (cb) cb.checked = true; }
