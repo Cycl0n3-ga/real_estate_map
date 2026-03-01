@@ -73,6 +73,17 @@ function isLotAddress(addr) { return /^\S*段\S*地號/.test(addr) || /段\d+地
 function getLocationMode() { const z = map ? map.getZoom() : 15; return z >= (markerSettings.osmZoom || 16) ? 'osm' : 'db'; }
 
 // ── Sidebar toggle ──
+function updateHamburgerBtn() {
+  const icon = document.getElementById('hamburgerIcon');
+  if (!icon) return;
+
+  if (_sidebarCollapsed) {
+    icon.textContent = '☰';
+  } else {
+    icon.textContent = '✕';
+  }
+}
+
 function toggleSidebar() {
   const sidebar = document.getElementById('sidebar');
   if (_sidebarCollapsed) {
@@ -85,10 +96,13 @@ function toggleSidebar() {
     // On mobile, just toggle show
     if (window.innerWidth <= 768) {
       sidebar.classList.toggle('show');
+      _sidebarCollapsed = !sidebar.classList.contains('show');
     } else {
       collapseSidebar();
+      return; // collapseSidebar updates the button
     }
   }
+  updateHamburgerBtn();
 }
 
 function collapseSidebar() {
@@ -96,6 +110,7 @@ function collapseSidebar() {
   sidebar.classList.add('collapsed');
   sidebar.classList.remove('show');
   _sidebarCollapsed = true;
+  updateHamburgerBtn();
 }
 
 // ── Filter panel ──
@@ -104,16 +119,35 @@ function toggleFilters() {
   const btn = document.getElementById('filterToggleBtn');
   const show = !dropdown.classList.contains('show');
   dropdown.classList.toggle('show', show);
-  btn.classList.toggle('active', show);
 }
+
+function updateFilterBtnState() {
+  const btn = document.getElementById('filterToggleBtn');
+  if (!btn) return;
+  const hasFilter = ['fBuildType', 'fRooms', 'fPing', 'fRatio', 'fUnitPrice', 'fPrice', 'fYear'].some(id => {
+    const el = document.getElementById(id);
+    return el && el.value.trim() !== '';
+  }) || (document.getElementById('fExcludeSpecial') && document.getElementById('fExcludeSpecial').checked);
+
+  if (hasFilter) {
+    btn.classList.add('active');
+    btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" /></svg> <span class="filter-label">篩選已套用</span>';
+  } else {
+    btn.classList.remove('active');
+    btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" /></svg> <span class="filter-label">篩選條件</span>';
+  }
+}
+
 function clearFilters() {
   ['fBuildType', 'fRooms', 'fPing', 'fRatio', 'fUnitPrice', 'fPrice', 'fYear'].forEach(id => {
     const el = document.getElementById(id); if (el) el.value = '';
   });
   const cb = document.getElementById('fExcludeSpecial'); if (cb) cb.checked = false;
   document.querySelectorAll('.quick-filters button').forEach(b => b.classList.remove('active'));
+  updateFilterBtnState();
 }
 function applyFiltersAndSearch() {
+  updateFilterBtnState();
   toggleFilters();
   doSearch();
 }
@@ -133,9 +167,11 @@ function quickFilter(mode) {
     document.getElementById('qfNoSpec').classList.toggle('active', cb.checked);
   } else if (mode === 'clear') {
     clearFilters();
+    updateFilterBtnState();
     if (txData.length > 0) rerunSearch();
     return;
   }
+  updateFilterBtnState();
   if (txData.length > 0) rerunSearch();
 }
 function getFilterParams() {
@@ -291,6 +327,7 @@ function hoverTx(idx) {
 function unhoverTx() { stopAllBounce(); hideMarkerTooltip(); }
 function hoverCommunity(name) {
   stopAllBounce();
+  document.getElementById('map').classList.add('hover-unblur');
   const matched = [];
   markerClusterGroup.eachLayer(layer => {
     if (layer._groupLabel === name || (layer._groupItems && layer._groupItems.some(it => it.tx.community_name === name)))
@@ -308,7 +345,10 @@ function hoverCommunity(name) {
   const doBounce = () => { if (!first._icon) return; bounceElement(first._icon.firstElementChild || first._icon); };
   if (first._icon) doBounce(); else setTimeout(doBounce, 350);
 }
-function unhoverCommunity() { stopAllBounce(); }
+function unhoverCommunity() {
+  stopAllBounce();
+  document.getElementById('map').classList.remove('hover-unblur');
+}
 
 // ── Search ──
 async function doSearch() {
@@ -799,31 +839,35 @@ function updateLegend() {
     matrixHtml += '</div>';
     const unitLabel = markerSettings.areaUnit === 'sqm' ? '萬/m²' : '萬/坪';
     const unitShort = markerSettings.areaUnit === 'sqm' ? '單價/m²' : '單價/坪';
-    legendContent = `<div style="font-weight:700;margin-bottom:6px;font-size:13px">🎨 雙變數色彩圖例</div>
-      <div style="font-size:11px;color:var(--text2);line-height:1.5">
-        <span style="display:inline-block;width:10px;height:10px;background:#6bc5d2;border-radius:2px;margin-right:4px"></span>水平(X)：${unitShort}越高越青<br>
-        <span style="display:inline-block;width:10px;height:10px;background:#c085be;border-radius:2px;margin-right:4px"></span>垂直(Y)：總價越高越洋紅
+    legendContent = `<div style="font-weight:800;margin-bottom:8px;font-size:12px;color:var(--primary-dark)">🎨 雙變數色彩映射</div>
+      <div style="font-size:10px;color:var(--text2);line-height:1.6;margin-bottom:6px">
+        <span style="display:inline-block;width:8px;height:8px;background:#6bc5d2;border-radius:1px;margin-right:4px"></span>水平：${unitShort}越高越青<br>
+        <span style="display:inline-block;width:8px;height:8px;background:#c085be;border-radius:1px;margin-right:4px"></span>垂直：總價越高越洋紅
       </div>
-      <div style="display:flex;align-items:center;gap:12px">
+      <div style="display:flex;justify-content:center;margin-bottom:6px">
         ${matrixHtml}
       </div>
-      <div style="font-size:10px;color:var(--text3);margin-top:4px;line-height:1.6">
-        單價: ≤${q[0]} | ${q[0]}-${q[1]} | ${q[1]}-${q[2]} | >${q[2]} ${unitLabel}<br>
-        總價: ≤${tq[0]} | ${tq[0]}-${tq[1]} | ${tq[1]}-${tq[2]} | >${tq[2]} 萬
+      <div style="font-size:9px;color:var(--text3);line-height:1.4">
+        單價: ≤${q[0]}|${q[0]}-${q[1]}|${q[1]}-${q[2]}|>${q[2]}<br>
+        總價: ≤${tq[0]}|${tq[0]}-${tq[1]}|${tq[1]}-${tq[2]}|>${tq[2]}
       </div>`;
   } else {
     const unitShort = markerSettings.areaUnit === 'sqm' ? '單價/m²' : '單價/坪';
     const unitLabel = markerSettings.areaUnit === 'sqm' ? '萬/m²' : '萬/坪';
-    legendContent = `<div style="font-weight:700;margin-bottom:4px;font-size:12px">🎯 雙圈色彩圖例</div>
-      <div style="font-weight:600;font-size:10px;color:var(--primary);margin-bottom:2px">● 外環＝${markerSettings.outerMode === 'unit_price' ? unitShort : '總價'} ｜ ● 內圈＝${markerSettings.innerMode === 'unit_price' ? unitShort : '總價'}</div>
-      <div style="display:flex;align-items:center;gap:4px;font-size:10px"><div style="width:12px;height:12px;border-radius:50%;background:linear-gradient(135deg,hsl(155,55%,38%),hsl(60,60%,42%))"></div><span>低→中（綠→黃）</span></div>
-      <div style="display:flex;align-items:center;gap:4px;font-size:10px"><div style="width:12px;height:12px;border-radius:50%;background:linear-gradient(135deg,hsl(60,60%,42%),hsl(0,65%,48%))"></div><span>中→高（黃→紅）</span></div>
-      <div style="font-size:9px;color:var(--text3);margin-top:2px">單價: ${markerSettings.unitThresholds[0]}~${markerSettings.unitThresholds[2]}${unitLabel}<br>總價: ${markerSettings.totalThresholds[0]}~${markerSettings.totalThresholds[2]}萬</div>`;
+    legendContent = `<div style="font-weight:800;margin-bottom:8px;font-size:12px;color:var(--primary-dark)">🎯 雙圈色彩定義</div>
+      <div style="font-weight:600;font-size:10px;color:var(--text);margin-bottom:6px;background:var(--bg2);padding:2px 6px;border-radius:4px;display:inline-block">外環＝${markerSettings.outerMode === 'unit_price' ? unitShort : '總價'} ｜ 內圈＝${markerSettings.innerMode === 'unit_price' ? unitShort : '總價'}</div>
+      <div style="display:flex;flex-direction:column;gap:4px;font-size:10px">
+        <div style="display:flex;align-items:center;gap:6px"><div style="width:12px;height:12px;border-radius:50%;background:linear-gradient(135deg,hsl(155,55%,38%),hsl(60,60%,42%))"></div><span>低→中 (綠→黃)</span></div>
+        <div style="display:flex;align-items:center;gap:6px"><div style="width:12px;height:12px;border-radius:50%;background:linear-gradient(135deg,hsl(60,60%,42%),hsl(0,65%,48%))"></div><span>中→高 (黃→紅)</span></div>
+      </div>
+      <div style="font-size:9px;color:var(--text3);margin-top:6px;border-top:1px dashed var(--border);padding-top:4px;line-height:1.4">
+        單價: ${markerSettings.unitThresholds[0]}~${markerSettings.unitThresholds[2]}${unitLabel}<br>總價: ${markerSettings.totalThresholds[0]}~${markerSettings.totalThresholds[2]}萬
+      </div>`;
   }
 
-  _legendDiv.innerHTML = `<div style="background:#fff;padding:10px 12px;border-radius:var(--radius);box-shadow:var(--shadow-md);font-size:11px;line-height:1.7;min-width:160px;border:1px solid var(--border)">
+  _legendDiv.innerHTML = `<div style="background:var(--glass);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);padding:12px;border-radius:var(--radius-lg);box-shadow:var(--shadow-md);font-size:11px;min-width:150px;border:1px solid var(--glass-border)">
     ${legendContent}
-    <div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--border);display:flex;justify-content:flex-end;align-items:center;">
+    <div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border);display:flex;justify-content:flex-start;align-items:center;">
       <div class="area-toggle-wrap">
         <label class="area-toggle"><input type="checkbox" id="areaToggle" ${areaAutoSearch ? 'checked' : ''} onchange="toggleAreaAutoSearch(this.checked)"><span class="area-toggle-slider"></span></label>
         <span class="area-toggle-label">自動顯示建案</span>
@@ -833,7 +877,7 @@ function updateLegend() {
 }
 function addLegend() {
   if (_legendControl) return;
-  _legendControl = L.control({ position: 'bottomright' });
+  _legendControl = L.control({ position: 'bottomleft' });
   _legendControl.onAdd = function () {
     _legendDiv = L.DomUtil.create('div', '');
     updateLegend();
