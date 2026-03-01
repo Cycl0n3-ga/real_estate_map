@@ -164,35 +164,19 @@ html, body {
 /* ════════ SIDEBAR ════════ */
 .sidebar {
   position:fixed;
-  top:calc(var(--navbar-h));
-  left:0; bottom:0;
+  top:calc(var(--navbar-h) + 12px);
+  left:12px; bottom:12px;
   width:var(--sidebar-w);
   background:var(--glass);
   backdrop-filter:blur(16px); -webkit-backdrop-filter:blur(16px);
-  border-right:1px solid var(--glass-border);
+  border:1px solid var(--glass-border);
+  border-radius:var(--radius-lg);
+  box-shadow:var(--shadow-lg);
   z-index:1050;
   display:flex; flex-direction:column; overflow:hidden;
-  transition:transform .3s cubic-bezier(.4,0,.2,1);
+  transition:transform .3s cubic-bezier(.4,0,.2,1), opacity .3s ease;
 }
-.sidebar.collapsed { transform:translateX(-100%); }
-
-/* Sidebar collapsed bar */
-.sidebar-collapsed-bar {
-  position:fixed;
-  top:var(--navbar-h); left:0; right:0;
-  background:#fff; border-bottom:1px solid var(--border);
-  padding:6px 16px; z-index:1040;
-  display:flex; align-items:center; justify-content:space-between;
-  box-shadow:var(--shadow-sm);
-}
-.collapsed-summary { font-size:12px; color:var(--text2); }
-.collapsed-summary .val { font-weight:700; color:var(--text); }
-.expand-btn {
-  padding:4px 14px; background:var(--primary); color:#fff;
-  border:none; border-radius:16px; font-size:11px; font-weight:600;
-  cursor:pointer; transition:var(--transition);
-}
-.expand-btn:hover { background:var(--primary-dark); }
+.sidebar.collapsed { transform:translateY(-20px); opacity:0; pointer-events:none; }
 
 /* Collapse toggle inside sidebar */
 .sidebar-collapse-toggle {
@@ -389,7 +373,7 @@ html, body {
   filter:blur(3px) brightness(0.6); transition:all .3s ease;
 }
 #map.spiderfied-active .leaflet-marker-icon:not(.spider-focus) {
-  opacity:.2; filter:blur(2px) grayscale(.8); transition:all .3s ease;
+  opacity:.2; filter:blur(2px) grayscale(.8); transition:all .3s ease; pointer-events:none;
 }
 .leaflet-marker-icon { transition:opacity .3s, filter .3s; }
 
@@ -558,6 +542,71 @@ html, body {
 .autocomplete-item .ac-tag.exact { background:var(--green-bg); color:var(--green); }
 .autocomplete-item .ac-tag.contains { background:rgba(30,64,175,.06); color:var(--primary); }
 .autocomplete-item .ac-tag.fuzzy { background:rgba(217,119,6,.06); color:var(--orange); }
+
+/* ════════ Dark Mode overrides ════════ */
+body.dark-mode {
+  --bg: #0f172a;
+  --bg2: #1e293b;
+  --card: #1e293b;
+  --card-hover: #334155;
+  --text: #f1f5f9;
+  --text2: #cbd5e1;
+  --text3: #94a3b8;
+  --border: #334155;
+  --border2: #475569;
+  --green-bg: rgba(5, 150, 105, 0.15);
+  --glass: rgba(15, 23, 42, 0.92);
+  --glass-border: rgba(255, 255, 255, 0.1);
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.4);
+  --shadow-lg: 0 8px 30px rgba(0, 0, 0, 0.5);
+}
+body.dark-mode .navbar,
+body.dark-mode .filter-dropdown,
+body.dark-mode .settings-panel,
+body.dark-mode .autocomplete-list,
+body.dark-mode .marker-tooltip-info,
+body.dark-mode .tx-card,
+body.dark-mode .nav-search input,
+body.dark-mode .filter-grid input,
+body.dark-mode .filter-grid select,
+body.dark-mode .settings-panel select,
+body.dark-mode .settings-panel input[type=number],
+body.dark-mode .sort-bar button,
+body.dark-mode .sort-bar .limit-select,
+body.dark-mode .quick-filters button,
+body.dark-mode .map-controls button {
+  background: var(--card);
+  color: var(--text);
+  border-color: var(--border);
+}
+body.dark-mode .tx-card:hover {
+  background: var(--card-hover);
+}
+body.dark-mode .nav-icon-btn:hover,
+body.dark-mode .hamburger:hover {
+  background: var(--bg2);
+}
+body.dark-mode .community-header {
+  background: var(--green-bg);
+  border-color: rgba(5, 150, 105, 0.3);
+}
+body.dark-mode .community-stats {
+  background: var(--green-bg);
+}
+body.dark-mode .autocomplete-item:hover,
+body.dark-mode .autocomplete-item.selected {
+  background: var(--bg2);
+}
+body.dark-mode .tx-parking-tag {
+  background: rgba(234, 88, 12, 0.1);
+  color: #fb923c;
+  border-color: rgba(234, 88, 12, 0.2);
+}
+body.dark-mode .special-badge {
+  background: rgba(220, 38, 38, 0.15);
+  color: #f87171;
+}
 
 /* ════════ Mobile ════════ */
 @media(max-width:768px) {

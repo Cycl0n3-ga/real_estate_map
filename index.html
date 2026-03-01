@@ -48,12 +48,6 @@
     </div>
   </nav>
 
-  <!-- ═══ COLLAPSED SIDEBAR BAR ═══ -->
-  <div class="sidebar-collapsed-bar" id="sidebarCollapsedBar" style="display:none">
-    <div id="collapsedSummary" class="collapsed-summary"></div>
-    <button class="expand-btn" onclick="toggleSidebar()">展開列表 ▼</button>
-  </div>
-
   <!-- ═══ FILTER PANEL (DROPDOWN) ═══ -->
   <div class="filter-dropdown" id="filterDropdown">
     <div class="filter-grid">
@@ -95,6 +89,14 @@
   <div class="settings-overlay" id="settingsOverlay" onclick="toggleSettings()"></div>
   <div class="settings-panel" id="settingsPanel">
     <h3>⚙️ 顯示設定</h3>
+
+    <div class="settings-group">
+      <div class="settings-group-title">🌙 主題模式</div>
+      <select id="sThemeMode" onchange="applySettings()">
+        <option value="light">淺色模式 (Light)</option>
+        <option value="dark">深色模式 (Dark)</option>
+      </select>
+    </div>
 
     <div class="settings-group">
       <div class="settings-group-title">🎨 泡泡模式</div>

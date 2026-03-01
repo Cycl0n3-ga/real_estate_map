@@ -25,6 +25,7 @@ let markerSettings = {
   unitThresholds: [20, 45, 70], totalThresholds: [500, 1750, 3000],
   osmZoom: 16, showLotAddr: false, yearFormat: 'roc',
   areaUnit: 'ping',  // 'ping' | 'sqm'
+  themeMode: 'light', // 'light' | 'dark'
   // Bivariate thresholds
   bivUnitQ: [25, 40, 60], bivTotalQ: [800, 1500, 2500],
 };
@@ -74,11 +75,9 @@ function getLocationMode() { const z = map ? map.getZoom() : 15; return z >= (ma
 // ── Sidebar toggle ──
 function toggleSidebar() {
   const sidebar = document.getElementById('sidebar');
-  const bar = document.getElementById('sidebarCollapsedBar');
   if (_sidebarCollapsed) {
     // expand
     sidebar.classList.remove('collapsed');
-    bar.style.display = 'none';
     _sidebarCollapsed = false;
     // On mobile, add show class
     if (window.innerWidth <= 768) sidebar.classList.add('show');
@@ -94,22 +93,9 @@ function toggleSidebar() {
 
 function collapseSidebar() {
   const sidebar = document.getElementById('sidebar');
-  const bar = document.getElementById('sidebarCollapsedBar');
   sidebar.classList.add('collapsed');
   sidebar.classList.remove('show');
-  bar.style.display = 'flex';
   _sidebarCollapsed = true;
-  updateCollapsedSummary();
-}
-
-function updateCollapsedSummary() {
-  const el = document.getElementById('collapsedSummary');
-  const s = window._summary;
-  if (!s || !s.total) {
-    el.innerHTML = '尚無搜尋結果';
-    return;
-  }
-  el.innerHTML = `共 <span class="val">${s.total}</span> 筆 ｜ 均價 <span class="val">${fmtWan(s.avg_price)}</span> ｜ 均面積 <span class="val">${fmtAvgArea(s.avg_ping)}</span>`;
 }
 
 // ── Filter panel ──
@@ -383,7 +369,6 @@ function handleSearchResult(data, fitBounds = true) {
     cNames.forEach(cn => { collapsedCommunities[cn] = true; });
   } else { collapsedCommunities = {}; }
   sortData(currentSort); renderResults(); renderSummary(); plotMarkers(fitBounds);
-  updateCollapsedSummary();
   if (window.innerWidth <= 768) document.getElementById('sidebar').classList.remove('show');
 }
 
@@ -830,8 +815,7 @@ function updateLegend() {
 
   _legendDiv.innerHTML = `<div style="background:#fff;padding:10px 12px;border-radius:var(--radius);box-shadow:var(--shadow-md);font-size:11px;line-height:1.7;min-width:160px;border:1px solid var(--border)">
     ${legendContent}
-    <div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;">
-      <button onclick="toggleSettings()" title="設定" style="width:28px;height:28px;padding:0;display:flex;align-items:center;justify-content:center;font-size:14px;background:var(--bg2);border:1px solid var(--border);border-radius:6px;cursor:pointer;">⚙️</button>
+    <div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--border);display:flex;justify-content:flex-end;align-items:center;">
       <div class="area-toggle-wrap">
         <label class="area-toggle"><input type="checkbox" id="areaToggle" ${areaAutoSearch ? 'checked' : ''} onchange="toggleAreaAutoSearch(this.checked)"><span class="area-toggle-slider"></span></label>
         <span class="area-toggle-label">自動顯示建案</span>
@@ -930,6 +914,11 @@ function applySettings() {
   markerSettings.osmZoom = parseInt(document.getElementById('sOsmZoom').value, 10) || 16;
   markerSettings.bubbleMode = document.getElementById('sBubbleMode').value;
   markerSettings.areaUnit = document.getElementById('sAreaUnit') ? document.getElementById('sAreaUnit').value : 'ping';
+  if (document.getElementById('sThemeMode')) {
+    markerSettings.themeMode = document.getElementById('sThemeMode').value;
+    if (markerSettings.themeMode === 'dark') document.body.classList.add('dark-mode');
+    else document.body.classList.remove('dark-mode');
+  }
 
   // Bivariate thresholds
   const bq1 = parseInt(document.getElementById('bivUnitQ1').value, 10);
@@ -957,6 +946,13 @@ function loadSettings() {
   if (!markerSettings.bivTotalQ || markerSettings.bivTotalQ.length !== 3) markerSettings.bivTotalQ = [800, 1500, 2500];
   if (!markerSettings.bubbleMode) markerSettings.bubbleMode = 'dual_ring';
   if (!markerSettings.areaUnit) markerSettings.areaUnit = 'ping';
+  if (!markerSettings.themeMode) markerSettings.themeMode = 'light';
+
+  if (document.getElementById('sThemeMode')) {
+    document.getElementById('sThemeMode').value = markerSettings.themeMode;
+    if (markerSettings.themeMode === 'dark') document.body.classList.add('dark-mode');
+    else document.body.classList.remove('dark-mode');
+  }
 
   document.getElementById('sOuter').value = markerSettings.outerMode || 'unit_price';
   document.getElementById('sInner').value = markerSettings.innerMode || 'total_price';
