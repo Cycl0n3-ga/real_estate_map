@@ -37,6 +37,60 @@
   --transition: .2s cubic-bezier(.4,0,.2,1);
 }
 
+body.dark-mode {
+  --primary: #3b82f6;
+  --primary-dark: #60a5fa;
+  --primary-light: #2563eb;
+  --bg: #0f172a;
+  --bg2: #1e293b;
+  --card: #1e293b;
+  --card-hover: #334155;
+  --text: #f8fafc;
+  --text2: #cbd5e1;
+  --text3: #94a3b8;
+  --border: #334155;
+  --border2: #475569;
+  --green: #10b981;
+  --green-bg: rgba(16, 185, 129, 0.15);
+  --red: #ef4444;
+  --orange: #f59e0b;
+  --glass: rgba(15, 23, 42, 0.85);
+  --glass-border: rgba(255, 255, 255, 0.1);
+}
+
+body.dark-mode .leaflet-tile-pane {
+  filter: invert(1) hue-rotate(180deg) brightness(0.95) contrast(1.1);
+}
+body.dark-mode .leaflet-container {
+  background: var(--bg) !important;
+}
+body.dark-mode .navbar,
+body.dark-mode .filter-dropdown,
+body.dark-mode .settings-panel,
+body.dark-mode .tx-card,
+body.dark-mode .selected-community,
+body.dark-mode .autocomplete-list,
+body.dark-mode .autocomplete-list .autocomplete-item {
+  background: var(--card);
+}
+body.dark-mode .nav-search input,
+body.dark-mode .filter-grid input,
+body.dark-mode .filter-grid select,
+body.dark-mode .settings-panel select,
+body.dark-mode .settings-panel input[type="number"],
+body.dark-mode .sort-bar button,
+body.dark-mode .quick-filters button,
+body.dark-mode .sort-bar .limit-select {
+  background: var(--bg2);
+  color: var(--text);
+  border-color: var(--border);
+}
+body.dark-mode .nav-filter-btn,
+body.dark-mode .sidebar-collapse-toggle button {
+  background: var(--bg2);
+  border-color: var(--border);
+}
+
 /* ════════ Reset ════════ */
 *, *::before, *::after { margin:0; padding:0; box-sizing:border-box; }
 html, body {
@@ -164,35 +218,23 @@ html, body {
 /* ════════ SIDEBAR ════════ */
 .sidebar {
   position:fixed;
-  top:calc(var(--navbar-h));
-  left:0; bottom:0;
+  top:calc(var(--navbar-h) + 16px);
+  left:16px; bottom:16px;
   width:var(--sidebar-w);
   background:var(--glass);
   backdrop-filter:blur(16px); -webkit-backdrop-filter:blur(16px);
-  border-right:1px solid var(--glass-border);
+  border:1px solid var(--border);
+  border-radius:var(--radius-lg);
+  box-shadow:var(--shadow-lg);
   z-index:1050;
   display:flex; flex-direction:column; overflow:hidden;
-  transition:transform .3s cubic-bezier(.4,0,.2,1);
+  transition:transform .3s cubic-bezier(.4,0,.2,1), opacity .3s;
 }
-.sidebar.collapsed { transform:translateX(-100%); }
-
-/* Sidebar collapsed bar */
-.sidebar-collapsed-bar {
-  position:fixed;
-  top:var(--navbar-h); left:0; right:0;
-  background:#fff; border-bottom:1px solid var(--border);
-  padding:6px 16px; z-index:1040;
-  display:flex; align-items:center; justify-content:space-between;
-  box-shadow:var(--shadow-sm);
+.sidebar.collapsed {
+  transform:translateY(-120%);
+  opacity: 0;
+  pointer-events: none;
 }
-.collapsed-summary { font-size:12px; color:var(--text2); }
-.collapsed-summary .val { font-weight:700; color:var(--text); }
-.expand-btn {
-  padding:4px 14px; background:var(--primary); color:#fff;
-  border:none; border-radius:16px; font-size:11px; font-weight:600;
-  cursor:pointer; transition:var(--transition);
-}
-.expand-btn:hover { background:var(--primary-dark); }
 
 /* Collapse toggle inside sidebar */
 .sidebar-collapse-toggle {
@@ -563,9 +605,27 @@ html, body {
 @media(max-width:768px) {
   .nav-logo { display:none; }
   .filter-label { display:none; }
-  .sidebar { width:100%; transform:translateX(-100%); }
-  .sidebar.show { transform:translateX(0); }
-  .sidebar.collapsed { transform:translateX(-100%); }
+  .sidebar {
+    width:100%;
+    top: var(--navbar-h);
+    left:0;
+    bottom:0;
+    border-radius: 0;
+    border: none;
+    transform:translateY(-120%);
+    opacity: 0;
+    pointer-events: none;
+  }
+  .sidebar.show {
+    transform:translateY(0);
+    opacity: 1;
+    pointer-events: auto;
+  }
+  .sidebar.collapsed {
+    transform:translateY(-120%);
+    opacity: 0;
+    pointer-events: none;
+  }
   .map-wrap { left:0; }
   .sort-bar { overflow-x:auto; flex-wrap:nowrap; -webkit-overflow-scrolling:touch; scrollbar-width:none; }
   .sort-bar::-webkit-scrollbar { display:none; }

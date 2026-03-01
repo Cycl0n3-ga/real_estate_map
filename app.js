@@ -23,6 +23,7 @@ let markerSettings = {
   contentMode: 'recent2yr',
   unitThresholds: [20, 45, 70], totalThresholds: [500, 1750, 3000],
   osmZoom: 16, showLotAddr: false, yearFormat: 'roc',
+  darkMode: false,
   // Bivariate thresholds
   bivUnitQ: [25, 40, 60], bivTotalQ: [800, 1500, 2500],
 };
@@ -44,11 +45,9 @@ function getLocationMode() { const z = map ? map.getZoom() : 15; return z >= (ma
 // ── Sidebar toggle ──
 function toggleSidebar() {
   const sidebar = document.getElementById('sidebar');
-  const bar = document.getElementById('sidebarCollapsedBar');
   if (_sidebarCollapsed) {
     // expand
     sidebar.classList.remove('collapsed');
-    bar.style.display = 'none';
     _sidebarCollapsed = false;
     // On mobile, add show class
     if (window.innerWidth <= 768) sidebar.classList.add('show');
@@ -64,22 +63,13 @@ function toggleSidebar() {
 
 function collapseSidebar() {
   const sidebar = document.getElementById('sidebar');
-  const bar = document.getElementById('sidebarCollapsedBar');
   sidebar.classList.add('collapsed');
   sidebar.classList.remove('show');
-  bar.style.display = 'flex';
   _sidebarCollapsed = true;
-  updateCollapsedSummary();
 }
 
 function updateCollapsedSummary() {
-  const el = document.getElementById('collapsedSummary');
-  const s = window._summary;
-  if (!s || !s.total) {
-    el.innerHTML = '尚無搜尋結果';
-    return;
-  }
-  el.innerHTML = `共 <span class="val">${s.total}</span> 筆 ｜ 均價 <span class="val">${fmtWan(s.avg_price)}</span> ｜ 均坪 <span class="val">${s.avg_ping}坪</span>`;
+  // Collapsed summary bar has been removed.
 }
 
 // ── Filter panel ──
@@ -794,10 +784,9 @@ function updateLegend() {
       <div style="font-size:9px;color:var(--text3);margin-top:2px">單價: ${markerSettings.unitThresholds[0]}~${markerSettings.unitThresholds[2]}萬/坪<br>總價: ${markerSettings.totalThresholds[0]}~${markerSettings.totalThresholds[2]}萬</div>`;
   }
 
-  _legendDiv.innerHTML = `<div style="background:#fff;padding:10px 12px;border-radius:var(--radius);box-shadow:var(--shadow-md);font-size:11px;line-height:1.7;min-width:160px;border:1px solid var(--border)">
+  _legendDiv.innerHTML = `<div style="background:var(--card);color:var(--text);padding:10px 12px;border-radius:var(--radius);box-shadow:var(--shadow-md);font-size:11px;line-height:1.7;min-width:160px;border:1px solid var(--border)">
     ${legendContent}
-    <div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;">
-      <button onclick="toggleSettings()" title="設定" style="width:28px;height:28px;padding:0;display:flex;align-items:center;justify-content:center;font-size:14px;background:var(--bg2);border:1px solid var(--border);border-radius:6px;cursor:pointer;">⚙️</button>
+    <div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--border);display:flex;justify-content:flex-end;align-items:center;">
       <div class="area-toggle-wrap">
         <label class="area-toggle"><input type="checkbox" id="areaToggle" ${areaAutoSearch ? 'checked' : ''} onchange="toggleAreaAutoSearch(this.checked)"><span class="area-toggle-slider"></span></label>
         <span class="area-toggle-label">自動顯示建案</span>
@@ -895,6 +884,13 @@ function applySettings() {
   markerSettings.contentMode = document.getElementById('sContent') ? document.getElementById('sContent').value : 'recent2yr';
   markerSettings.osmZoom = parseInt(document.getElementById('sOsmZoom').value, 10) || 16;
   markerSettings.bubbleMode = document.getElementById('sBubbleMode').value;
+  markerSettings.darkMode = document.getElementById('sDarkMode') ? document.getElementById('sDarkMode').checked : false;
+
+  if (markerSettings.darkMode) {
+    document.body.classList.add('dark-mode');
+  } else {
+    document.body.classList.remove('dark-mode');
+  }
 
   // Bivariate thresholds
   const bq1 = parseInt(document.getElementById('bivUnitQ1').value, 10);
@@ -928,6 +924,16 @@ function loadSettings() {
   if (document.getElementById('sYearFormat')) document.getElementById('sYearFormat').value = markerSettings.yearFormat || 'roc';
   if (document.getElementById('sContent')) document.getElementById('sContent').value = markerSettings.contentMode || 'recent2yr';
   if (document.getElementById('sOsmZoom')) document.getElementById('sOsmZoom').value = markerSettings.osmZoom || 16;
+
+  if (document.getElementById('sDarkMode')) {
+    document.getElementById('sDarkMode').checked = !!markerSettings.darkMode;
+  }
+  if (markerSettings.darkMode) {
+    document.body.classList.add('dark-mode');
+  } else {
+    document.body.classList.remove('dark-mode');
+  }
+
   document.getElementById('sBubbleMode').value = markerSettings.bubbleMode;
   document.getElementById('dualRingSettings').style.display = markerSettings.bubbleMode === 'dual_ring' ? '' : 'none';
   document.getElementById('bivariateSettings').style.display = markerSettings.bubbleMode === 'bivariate' ? '' : 'none';
