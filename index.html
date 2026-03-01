@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>良富居地產 — 不動產實價登錄查詢</title>
+
+  <!-- 防止搜尋引擎索引 -->
+  <meta name="robots" content="noindex, nofollow">
+  <meta name="googlebot" content="noindex, nofollow">
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Noto+Sans+TC:wght@400;500;700;800&display=swap"
+    rel="stylesheet">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.1/dist/MarkerCluster.css" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.1/dist/MarkerCluster.Default.css" />
+  <link rel="stylesheet" href="styles.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://unpkg.com/leaflet.markercluster@1.5.1/dist/leaflet.markercluster.js"></script>
+</head>
+
+<body>
+
+  <!-- ═══ NAVBAR ═══ -->
+  <nav class="navbar" id="navbar">
+    <div class="nav-left">
+      <button class="hamburger" id="hamburgerBtn" onclick="toggleSidebar()" title="展開/收合側欄">☰</button>
+      <div class="nav-logo">🏢 良富居</div>
+      <div class="nav-search autocomplete-wrap" id="navSearch">
+        <input id="searchInput" type="text" placeholder="搜尋地址 / 建案名稱…"
+          onkeydown="handleSearchKeydown(event)" oninput="onSearchInput()" autocomplete="off">
+        <button class="nav-search-btn" onclick="doSearch()">搜尋</button>
+        <div class="autocomplete-list" id="acList"></div>
+      </div>
+      <button class="nav-filter-btn" onclick="toggleFilters()" id="filterToggleBtn" title="進階篩選">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" />
+        </svg>
+        <span class="filter-label">篩選</span>
+      </button>
+    </div>
+    <div class="nav-right">
+      <button class="nav-icon-btn" id="settingsBtn" onclick="toggleSettings()" title="設定">⚙️</button>
+    </div>
+  </nav>
+
+  <!-- ═══ COLLAPSED SIDEBAR BAR ═══ -->
+  <div class="sidebar-collapsed-bar" id="sidebarCollapsedBar" style="display:none">
+    <div id="collapsedSummary" class="collapsed-summary"></div>
+    <button class="expand-btn" onclick="toggleSidebar()">展開列表 ▼</button>
+  </div>
+
+  <!-- ═══ FILTER PANEL (DROPDOWN) ═══ -->
+  <div class="filter-dropdown" id="filterDropdown">
+    <div class="filter-grid">
+      <div><label>建物型態</label>
+        <select id="fBuildType">
+          <option value="">全部</option>
+          <option value="住宅大樓">住宅大樓(11樓含以上有電梯)</option>
+          <option value="華廈">華廈(10樓含以下有電梯)</option>
+          <option value="公寓">公寓(5樓含以下無電梯)</option>
+          <option value="透天厝">透天厝</option>
+          <option value="套房">套房(1房1廳1衛)</option>
+        </select>
+      </div>
+      <div><label>房數</label><input id="fRooms" type="text" placeholder="如 2,3,4"></div>
+      <div><label>坪數範圍</label><input id="fPing" type="text" placeholder="如 20-40"></div>
+      <div><label>公設比 %</label><input id="fRatio" type="text" placeholder="如 0-35"></div>
+      <div><label>單價 (萬/坪)</label><input id="fUnitPrice" type="text" placeholder="如 40-80"></div>
+      <div><label>總價 (萬)</label><input id="fPrice" type="text" placeholder="如 1000-3000"></div>
+      <div><label>歷年範圍</label><input id="fYear" type="text" placeholder="如: 110-114 或 2021-2025"></div>
+      <div class="filter-row-special">
+        <label style="display:flex;align-items:center;gap:4px;cursor:pointer;font-size:12px">
+          <input type="checkbox" id="fExcludeSpecial"> 排除特殊交易
+        </label>
+      </div>
+    </div>
+    <div class="filter-actions">
+      <button class="btn-clear" onclick="clearFilters()">清除</button>
+      <button class="btn-apply" onclick="applyFiltersAndSearch()">套用篩選</button>
+    </div>
+  </div>
+
+  <!-- ═══ SELECTED COMMUNITY ═══ -->
+  <div id="selectedCommunity" class="selected-community" style="display:none">
+    <span>🏠 <b id="selComName"></b></span>
+    <button onclick="clearSelectedCommunity()">✖</button>
+  </div>
+
+  <!-- ═══ SETTINGS PANEL ═══ -->
+  <div class="settings-overlay" id="settingsOverlay" onclick="toggleSettings()"></div>
+  <div class="settings-panel" id="settingsPanel">
+    <h3>⚙️ 顯示設定</h3>
+
+    <div class="settings-group">
+      <div class="settings-group-title">🎨 泡泡模式</div>
+      <select id="sBubbleMode" onchange="onBubbleModeChange()">
+        <option value="dual_ring">雙圈模式（外環 + 內圈）</option>
+        <option value="bivariate">雙變數色彩映射（Bivariate）</option>
+      </select>
+    </div>
+
+    <!-- 雙圈模式設定 -->
+    <div id="dualRingSettings">
+      <div class="settings-group">
+        <div class="settings-group-title">🔴 雙圈色彩定義</div>
+        <select id="sOuter" onchange="applySettings()">
+          <option value="unit_price">單價/坪 (外環)</option>
+          <option value="total_price">總價 (外環)</option>
+        </select>
+        <select id="sInner" onchange="applySettings()">
+          <option value="total_price">總價 (內圈)</option>
+          <option value="unit_price">單價/坪 (內圈)</option>
+        </select>
+
+        <div class="settings-group-title" style="margin-top:8px">🔶 單價色階 (綠→黃→紅)</div>
+        <div class="range-slider-wrap">
+          <div class="rs-label">低於 <span id="vUnitMin" class="highlight-val">20</span> 萬為綠，高於 <span
+              id="vUnitMax" class="highlight-val">70</span> 萬為紅</div>
+          <div class="rs-container">
+            <input type="range" id="unitMin" min="10" max="150" value="20" step="5" oninput="updateThresh()">
+            <input type="range" id="unitMax" min="10" max="150" value="70" step="5" oninput="updateThresh()">
+          </div>
+        </div>
+
+        <div class="settings-group-title" style="margin-top:16px">🔶 總價色階 (綠→黃→紅)</div>
+        <div class="range-slider-wrap">
+          <div class="rs-label">低於 <span id="vTotalMin" class="highlight-val">500</span> 萬為綠，高於 <span
+              id="vTotalMax" class="highlight-val">3000</span> 萬為紅</div>
+          <div class="rs-container">
+            <input type="range" id="totalMin" min="300" max="8000" value="500" step="100" oninput="updateThresh()">
+            <input type="range" id="totalMax" min="300" max="8000" value="3000" step="100" oninput="updateThresh()">
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 雙變數色彩模式設定 -->
+    <div id="bivariateSettings" style="display:none">
+      <div class="settings-group">
+        <div class="settings-group-title">🟦 單價四等份（X 軸 · 青色）</div>
+        <div class="biv-range-row">
+          <label>Q1</label><input type="number" id="bivUnitQ1" value="25" class="biv-input" onchange="applySettings()">
+          <label>Q2</label><input type="number" id="bivUnitQ2" value="40" class="biv-input" onchange="applySettings()">
+          <label>Q3</label><input type="number" id="bivUnitQ3" value="60" class="biv-input" onchange="applySettings()">
+        </div>
+        <div class="biv-hint">萬/坪：≤Q1 | Q1~Q2 | Q2~Q3 | >Q3</div>
+
+        <div class="settings-group-title" style="margin-top:12px">🟪 總價四等份（Y 軸 · 洋紅）</div>
+        <div class="biv-range-row">
+          <label>Q1</label><input type="number" id="bivTotalQ1" value="800" class="biv-input"
+            onchange="applySettings()">
+          <label>Q2</label><input type="number" id="bivTotalQ2" value="1500" class="biv-input"
+            onchange="applySettings()">
+          <label>Q3</label><input type="number" id="bivTotalQ3" value="2500" class="biv-input"
+            onchange="applySettings()">
+        </div>
+        <div class="biv-hint">萬：≤Q1 | Q1~Q2 | Q2~Q3 | >Q3</div>
+      </div>
+      <div class="settings-group">
+        <div class="settings-group-title">📊 4×4 矩陣色盤預覽</div>
+        <div id="bivMatrixPreview" class="biv-matrix"></div>
+      </div>
+    </div>
+
+    <div class="settings-group">
+      <div class="settings-group-title">📊 價格計算方式</div>
+      <select id="sContent" onchange="applySettings()">
+        <option value="recent2yr">近兩年均價(排除特殊)</option>
+        <option value="all">全期間均價</option>
+      </select>
+    </div>
+    <div class="settings-group">
+      <div class="settings-group-title">📋 顯示設定</div>
+      <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer">
+        <input type="checkbox" id="sShowLotAddr" onchange="applySettings()"> 顯示地號/小段交易
+      </label>
+    </div>
+    <div class="settings-group">
+      <div class="settings-group-title">📅 年份顯示格式</div>
+      <select id="sYearFormat" onchange="applySettings()">
+        <option value="roc">民國 (ROC)</option>
+        <option value="ce">西元 (CE)</option>
+      </select>
+    </div>
+    <div class="settings-group">
+      <div class="settings-group-title">📍 自動精確定位</div>
+      <label style="margin-top:4px;font-size:11px;display:flex;align-items:center;gap:4px">
+        <input type="number" id="sOsmZoom" value="16" min="13" max="19" style="width:50px"
+          onchange="applySettings()"> 級以上使用精確定位
+      </label>
+    </div>
+  </div>
+
+  <!-- ═══ SIDEBAR ═══ -->
+  <div class="sidebar" id="sidebar">
+    <!-- Quick Filters -->
+    <div class="quick-filters">
+      <span>快速:</span>
+      <button onclick="quickFilter('1yr')" id="qf1yr">近一年</button>
+      <button onclick="quickFilter('2yr')" id="qf2yr">近兩年</button>
+      <button onclick="quickFilter('nospecial')" id="qfNoSpec">排除特殊</button>
+      <button onclick="quickFilter('clear')">✕ 清除</button>
+    </div>
+
+    <!-- Sort -->
+    <div class="sort-bar">
+      <button class="active" data-sort="date" onclick="setSort(this)">日期 ▼</button>
+      <button data-sort="price" onclick="setSort(this)">總價</button>
+      <button data-sort="unit_price" onclick="setSort(this)">單價</button>
+      <button data-sort="ping" onclick="setSort(this)">坪數</button>
+      <button data-sort="public_ratio" onclick="setSort(this)">公設</button>
+      <button data-sort="community" onclick="setSort(this)">建案</button>
+      <select id="limitSelect" class="limit-select" onchange="rerunSearch()" title="顯示筆數">
+        <option value="250">250筆</option>
+        <option value="500">500筆</option>
+        <option value="1000">1000筆</option>
+        <option value="2500" selected>2500筆</option>
+        <option value="5000">5000筆</option>
+      </select>
+    </div>
+
+    <!-- Summary -->
+    <div class="summary-bar" id="summaryBar"></div>
+
+    <!-- Collapse toggle -->
+    <div class="sidebar-collapse-toggle">
+      <button onclick="collapseSidebar()" title="收合列表">收起列表 ▲</button>
+    </div>
+
+    <!-- Results -->
+    <div class="results" id="results">
+      <div class="empty">
+        👆 輸入地址或建案名稱開始搜尋<br>
+        <span style="font-size:12px;margin-top:8px;display:block">或開啟「自動顯示建案」功能</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ MAP ═══ -->
+  <div class="map-wrap">
+    <div id="map"></div>
+    <div class="map-controls">
+      <button onclick="locateMe()" title="移動到我的位置">📍</button>
+      <button onclick="map.zoomIn()" title="放大">＋</button>
+      <button onclick="map.zoomOut()" title="縮小">－</button>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+
+</html>
