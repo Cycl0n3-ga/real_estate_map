@@ -102,7 +102,7 @@ html, body {
   transition:var(--transition); white-space:nowrap; flex-shrink:0;
 }
 .nav-filter-btn:hover { border-color:var(--primary-light); color:var(--primary); }
-.nav-filter-btn.active { background:rgba(59,130,246,.08); border-color:var(--primary-light); color:var(--primary); }
+.nav-filter-btn.active { background:var(--primary); border-color:var(--primary); color:#fff; }
 
 .nav-icon-btn {
   background:none; border:1px solid var(--border); border-radius:var(--radius);
@@ -368,6 +368,13 @@ html, body {
 .map-wrap { position:fixed; top:var(--navbar-h); bottom:0; left:0; right:0; }
 #map { width:100%; height:100%; }
 
+#map.spiderfied-active:not(.hover-unblur) .leaflet-tile-pane,
+#map.spiderfied-active:not(.hover-unblur) .leaflet-overlay-pane {
+  filter:blur(3px) brightness(0.6); transition:all .3s ease;
+}
+#map.spiderfied-active:not(.hover-unblur) .leaflet-marker-icon:not(.spider-focus) {
+  opacity:.2; filter:blur(2px) grayscale(.8); transition:all .3s ease; pointer-events:none;
+}
 .leaflet-marker-icon { transition:opacity .3s, filter .3s; }
 
 .map-controls {
