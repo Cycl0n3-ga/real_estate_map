@@ -77,7 +77,11 @@ function getLocationMode() { const z = map ? map.getZoom() : 15; return z >= (ma
 function updateHamburgerIcon() {
   const btn = document.getElementById('hamburgerBtn');
   if (btn) {
-    btn.textContent = _sidebarCollapsed ? '▶' : '◀';
+    if (window.innerWidth <= 768) {
+      btn.textContent = _sidebarCollapsed ? '▲' : '▼';
+    } else {
+      btn.textContent = _sidebarCollapsed ? '▶' : '◀';
+    }
   }
 }
 
@@ -369,17 +373,24 @@ async function doSearch() {
     const data = await resp.json();
     if (!data.success) { results.innerHTML = '<div class="empty">❌ ' + (data.error || '搜尋失敗') + '</div>'; return; }
     handleSearchResult(data);
-  } catch (e) { results.innerHTML = '<div class="empty">❌ 網路錯誤: ' + e.message + '</div>'; }
+  } catch (e) { results.innerHTML = '<div class="empty">❌ 網路連線異常，請稍後再試<br><span style="font-size:12px">(' + e.message + ')</span></div>'; }
 }
 
+let _areaSearchController = null;
+
 async function doAreaSearch() {
+  if (_areaSearchController) {
+    _areaSearchController.abort();
+  }
+  _areaSearchController = new AbortController();
+
   const bounds = map.getBounds(); lastSearchType = 'area';
   const results = document.getElementById('results');
   results.innerHTML = '<div class="loading"><div class="skeleton" style="height:60px;margin:16px"></div></div>';
   const limitVal = document.getElementById('limitSelect').value;
   const url = `${API_BASE}/api/search_area?south=${bounds.getSouth()}&north=${bounds.getNorth()}&west=${bounds.getWest()}&east=${bounds.getEast()}&limit=${limitVal}&location_mode=${getLocationMode()}${getFilterParams()}`;
   try {
-    const resp = await fetch(url);
+    const resp = await fetch(url, { signal: _areaSearchController.signal });
     const ctype = resp.headers.get('content-type') || '';
     if (!ctype.includes('application/json')) { results.innerHTML = `<div class="empty">❌ 搜此區域失敗 (HTTP ${resp.status})</div>`; return; }
     const data = await resp.json();
@@ -390,7 +401,14 @@ async function doAreaSearch() {
       markerGroup.clearLayers(); return;
     }
     handleSearchResult(data, false);
-  } catch (e) { results.innerHTML = '<div class="empty">❌ 網路連線異常，請稍後再試</div>'; }
+  } catch (e) {
+    if (e.name === 'AbortError') return;
+    results.innerHTML = '<div class="empty">❌ 網路連線異常，請稍後再試<br><span style="font-size:12px">(' + e.message + ')</span></div>';
+  } finally {
+    if (_areaSearchController && !_areaSearchController.signal.aborted) {
+      _areaSearchController = null;
+    }
+  }
 }
 
 function handleSearchResult(data, fitBounds = true) {
@@ -902,15 +920,61 @@ function addLegend() {
 }
 
 // ── Location ──
+let compassListenerAdded = false;
+
+function startCompass() {
+  if (compassListenerAdded) return;
+
+  const handleOrientation = (e) => {
+    let heading = null;
+    if (e.webkitCompassHeading !== undefined) {
+      heading = e.webkitCompassHeading;
+    } else if (e.alpha !== null) {
+      heading = 360 - e.alpha;
+    }
+
+    if (heading !== null && locationMarker && locationMarker._icon) {
+      const headingEl = locationMarker._icon.querySelector('.locate-heading');
+      if (headingEl) {
+        headingEl.style.display = 'block';
+        headingEl.style.transform = `rotate(${heading}deg)`;
+      }
+    }
+  };
+
+  if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
+    DeviceOrientationEvent.requestPermission()
+      .then(permissionState => {
+        if (permissionState === 'granted') {
+          window.addEventListener('deviceorientation', handleOrientation, true);
+          compassListenerAdded = true;
+        }
+      })
+      .catch(console.error);
+  } else {
+    window.addEventListener('deviceorientationabsolute', handleOrientation, true);
+    window.addEventListener('deviceorientation', handleOrientation, true);
+    compassListenerAdded = true;
+  }
+}
+
 function locateMe() {
   if (!navigator.geolocation) { alert('您的瀏覽器不支援定位功能'); return; }
+
+  // Start compass synchronously to satisfy iOS Safari requirements for DeviceOrientationEvent.requestPermission()
+  startCompass();
+
   navigator.geolocation.getCurrentPosition(pos => {
     const { latitude: lat, longitude: lng, accuracy } = pos.coords;
     map.setView([lat, lng], 16);
     if (locationMarker) map.removeLayer(locationMarker);
     if (locationCircle) map.removeLayer(locationCircle);
+
     locationCircle = L.circle([lat, lng], { radius: accuracy, color: 'var(--primary)', fillColor: 'var(--primary)', fillOpacity: .1, weight: 1 }).addTo(map);
-    locationMarker = L.marker([lat, lng], { icon: L.divIcon({ html: '<div class="locate-pulse"></div>', iconSize: [16, 16], className: '' }), zIndexOffset: 1000 }).addTo(map).bindPopup(`📍 您的位置<br><span style="font-size:11px;color:var(--text2)">精確度: ±${Math.round(accuracy)}m</span>`).openPopup();
+
+    const iconHtml = `<div class="locate-marker-wrap"><div class="locate-heading"></div><div class="locate-pulse"></div></div>`;
+    locationMarker = L.marker([lat, lng], { icon: L.divIcon({ html: iconHtml, iconSize: [48, 48], className: '' }), zIndexOffset: 1000 }).addTo(map).bindPopup(`📍 您的位置<br><span style="font-size:11px;color:var(--text2)">精確度: ±${Math.round(accuracy)}m</span>`).openPopup();
+
     setTimeout(() => { if (locationCircle) { map.removeLayer(locationCircle); locationCircle = null; } }, 5000);
   }, err => { alert('定位失敗: ' + err.message); }, { enableHighAccuracy: true, timeout: 10000 });
 }
