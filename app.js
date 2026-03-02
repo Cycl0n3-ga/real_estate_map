@@ -23,7 +23,7 @@ let markerSettings = {
   outerMode: 'unit_price', innerMode: 'total_price',
   contentMode: 'recent2yr',
   unitThresholds: [20, 45, 70], totalThresholds: [500, 1750, 3000],
-  osmZoom: 16, showLotAddr: false, yearFormat: 'roc',
+  displayLogic: 'auto', osmZoom: 16, showLotAddr: false, yearFormat: 'roc',
   areaUnit: 'ping',  // 'ping' | 'sqm'
   themeMode: 'light', // 'light' | 'dark'
   // Bivariate thresholds
@@ -650,6 +650,12 @@ function initMap() {
   map.addLayer(markerClusterGroup);
   markerGroup = L.featureGroup().addTo(map);
   map.on('moveend', onMapMoveEnd);
+  map.on('zoomend', () => {
+    if (markerSettings.displayLogic !== 'all' && txData.length > 0) {
+      clearTimeout(window._replotTimer);
+      window._replotTimer = setTimeout(() => { plotMarkers(false); }, 100);
+    }
+  });
   addLegend();
 }
 
@@ -705,9 +711,19 @@ function buildGroups() {
   return arr;
 }
 
+function getMinPriceThreshold(zoom) {
+  if (zoom <= 14) return 80000000;
+  if (zoom === 15) return 50000000;
+  if (zoom === 16) return 20000000;
+  return 0;
+}
+
 function plotMarkers(fitBounds = true) {
   markerClusterGroup.clearLayers();
   const boundsArr = [], groups = buildGroups();
+  const currentZoom = map ? map.getZoom() : 16;
+  const minPrice = (markerSettings.displayLogic !== 'all') ? getMinPriceThreshold(currentZoom) : 0;
+
   groups.forEach(g => {
     const n = g.items.length; if (n === 0) return;
     const sortedLats = g.lats.slice().sort((a, b) => a - b), sortedLngs = g.lngs.slice().sort((a, b) => a - b), mid = Math.floor(sortedLats.length / 2);
@@ -715,6 +731,7 @@ function plotMarkers(fitBounds = true) {
     if (lat == null || lng == null || isNaN(lat) || isNaN(lng)) return;
     const useRecent = markerSettings.contentMode === 'recent2yr' && g.recentCount > 0;
     const avgPrice = useRecent ? g.recentAvgPrice : (g.prices.length ? g.prices.reduce((a, b) => a + b, 0) / g.prices.length : 0);
+    if (minPrice > 0 && avgPrice < minPrice) return;
     const avgUnitPrice = useRecent ? g.recentAvgUnitPrice : (g.unitPrices.length ? g.unitPrices.reduce((a, b) => a + b, 0) / g.unitPrices.length : 0);
     const avgPriceWan = avgPrice / 10000, avgUnitWan = avgUnitPrice / 10000;
     const label = g.label ? g.label.substring(0, 8) : '';
@@ -976,7 +993,8 @@ function applySettings() {
   markerSettings.showLotAddr = document.getElementById('sShowLotAddr').checked;
   markerSettings.yearFormat = document.getElementById('sYearFormat') ? document.getElementById('sYearFormat').value : 'roc';
   markerSettings.contentMode = document.getElementById('sContent') ? document.getElementById('sContent').value : 'recent2yr';
-  markerSettings.osmZoom = parseInt(document.getElementById('sOsmZoom').value, 10) || 16;
+  if (document.getElementById('sDisplayLogic')) markerSettings.displayLogic = document.getElementById('sDisplayLogic').value;
+  markerSettings.osmZoom = 16;
   markerSettings.bubbleMode = document.getElementById('sBubbleMode').value;
   markerSettings.areaUnit = document.getElementById('sAreaUnit') ? document.getElementById('sAreaUnit').value : 'ping';
   if (document.getElementById('sThemeToggle')) {
@@ -1018,7 +1036,7 @@ function loadSettings() {
   document.getElementById('sShowLotAddr').checked = !!markerSettings.showLotAddr;
   if (document.getElementById('sYearFormat')) document.getElementById('sYearFormat').value = markerSettings.yearFormat || 'roc';
   if (document.getElementById('sContent')) document.getElementById('sContent').value = markerSettings.contentMode || 'recent2yr';
-  if (document.getElementById('sOsmZoom')) document.getElementById('sOsmZoom').value = markerSettings.osmZoom || 16;
+  if (document.getElementById('sDisplayLogic')) document.getElementById('sDisplayLogic').value = markerSettings.displayLogic || 'auto';
   if (document.getElementById('sAreaUnit')) document.getElementById('sAreaUnit').value = markerSettings.areaUnit || 'ping';
   document.getElementById('sBubbleMode').value = markerSettings.bubbleMode;
   document.getElementById('dualRingSettings').style.display = markerSettings.bubbleMode === 'dual_ring' ? '' : 'none';

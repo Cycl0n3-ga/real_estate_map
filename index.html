@@ -153,11 +153,10 @@
       </select>
     </div>
     <div class="settings-group">
-      <div class="settings-group-title">📍 自動精確定位層級</div>
-      <select id="sOsmZoom" onchange="applySettings()">
-        <option value="15">15級 (較大範圍)</option>
-        <option value="16">16級 (適中 - 預設)</option>
-        <option value="17">17級 (精細範圍)</option>
+      <div class="settings-group-title">📍 顯示邏輯</div>
+      <select id="sDisplayLogic" onchange="applySettings()">
+        <option value="auto">依層級自動過濾 (預設)</option>
+        <option value="all">全部顯示</option>
       </select>
     </div>
   </div>
