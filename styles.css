@@ -113,18 +113,19 @@ html, body {
 
 /* ════════ Filter Dropdown ════════ */
 .filter-dropdown {
-  position:fixed; top:var(--navbar-h); left:0; right:0;
-  background:#fff; border-bottom:1px solid var(--border);
-  box-shadow:var(--shadow-md);
-  z-index:1090; padding:16px 20px;
-  display:none;
+  position:absolute; top:100%; left:12px; right:12px;
+  background:#fff; border:1px solid var(--border);
+  border-radius:var(--radius-lg);
+  box-shadow:var(--shadow-lg);
+  z-index:1090; padding:16px;
+  display:none; margin-top:4px;
   animation:slideDown .2s ease;
 }
 .filter-dropdown.show { display:block; }
 @keyframes slideDown { from { opacity:0; transform:translateY(-8px); } to { opacity:1; transform:translateY(0); } }
 .filter-grid {
-  display:grid; grid-template-columns:repeat(auto-fill,minmax(180px,1fr));
-  gap:10px; max-width:1100px; margin:0 auto;
+  display:grid; grid-template-columns:1fr 1fr;
+  gap:10px; margin:0 auto;
 }
 .filter-grid label { font-size:11px; color:var(--text2); margin-bottom:3px; display:block; font-weight:500; }
 .filter-grid input, .filter-grid select {
@@ -137,9 +138,9 @@ html, body {
   border-color:var(--primary-light); outline:none;
   box-shadow:0 0 0 2px rgba(59,130,246,.08);
 }
-.filter-row-special { display:flex; align-items:center; padding-top:18px; }
+.filter-row-special { display:flex; align-items:center; padding-top:18px; grid-column:1/-1; }
 .filter-actions {
-  display:flex; gap:8px; justify-content:flex-end; margin-top:12px; max-width:1100px; margin-left:auto; margin-right:auto;
+  display:flex; gap:8px; justify-content:flex-end; margin-top:16px; border-top:1px solid var(--border); padding-top:16px;
 }
 .filter-actions button {
   padding:8px 24px; border-radius:var(--radius); font-size:13px; font-weight:600; cursor:pointer;
@@ -642,7 +643,7 @@ body.dark-mode .special-badge {
   .tx-price { font-size:16px; }
   .community-stats { grid-template-columns:repeat(3,1fr); }
   .nav-search input { font-size:16px; }
-  .map-controls { bottom:100px; right:8px; }
+  .map-controls { bottom:150px; right:8px; }
   .map-controls button { width:36px; height:36px; font-size:16px; }
   .settings-panel { width:100%; max-width:100vw; border-radius:0; }
   .selected-community { left:10px; top:calc(var(--navbar-h) + 4px); }

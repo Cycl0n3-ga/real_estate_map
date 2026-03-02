@@ -74,6 +74,13 @@ function isLotAddress(addr) { return /^\S*段\S*地號/.test(addr) || /段\d+地
 function getLocationMode() { const z = map ? map.getZoom() : 15; return z >= (markerSettings.osmZoom || 16) ? 'osm' : 'db'; }
 
 // ── Sidebar toggle ──
+function updateHamburgerIcon() {
+  const btn = document.getElementById('hamburgerBtn');
+  if (btn) {
+    btn.textContent = _sidebarCollapsed ? '▶' : '◀';
+  }
+}
+
 function toggleSidebar() {
   const sidebar = document.getElementById('sidebar');
   if (_sidebarCollapsed) {
@@ -83,14 +90,15 @@ function toggleSidebar() {
     // On mobile, add show class
     if (window.innerWidth <= 768) sidebar.classList.add('show');
   } else {
-    // On mobile, just toggle show
+    // collapse
     if (window.innerWidth <= 768) {
-      sidebar.classList.toggle('show');
-      _sidebarCollapsed = !sidebar.classList.contains('show');
+      sidebar.classList.remove('show');
+      _sidebarCollapsed = true;
     } else {
       collapseSidebar();
     }
   }
+  updateHamburgerIcon();
 }
 
 function collapseSidebar() {
@@ -98,6 +106,7 @@ function collapseSidebar() {
   sidebar.classList.add('collapsed');
   sidebar.classList.remove('show');
   _sidebarCollapsed = true;
+  updateHamburgerIcon();
 }
 
 // ── Filter panel ──
@@ -339,6 +348,14 @@ function unhoverCommunity() {
 async function doSearch() {
   const kw = document.getElementById('searchInput').value.trim();
   if (!kw && !getFilterParams() && !_selectedCommunity) { alert('請輸入搜尋關鍵字或選擇篩選條件'); return; }
+
+  // If there's no keyword and no selected community, but there ARE filters,
+  // delegate to area search instead to prevent backend 400 errors for missing keyword.
+  if (!kw && !_selectedCommunity) {
+    doAreaSearch();
+    return;
+  }
+
   hideAcList(); lastSearchType = 'keyword';
   const results = document.getElementById('results');
   results.innerHTML = '<div class="loading"><div class="skeleton" style="height:60px;margin:16px"></div><div class="skeleton" style="height:60px;margin:16px"></div></div>';
@@ -416,7 +433,7 @@ function renderResults() {
     const stats = communitySummaries[cn] || computeLocalStats(group.items);
     html += `<div class="community-group">`;
     const inlineStats = stats ? [stats.avg_unit_price_ping > 0 ? `均單 ${fmtAvgUnitWan(stats.avg_unit_price_ping)}` : '', stats.avg_ping > 0 ? `均面積 ${fmtAvgArea(stats.avg_ping)}` : '', stats.avg_ratio > 0 ? `公設 ${stats.avg_ratio.toFixed(0)}%` : ''].filter(Boolean) : [];
-    html += `<div class="community-header" onclick="toggleCommunity(this,'${escAttr(cn)}')" onmouseenter="_isHoveringList=true; hoverCommunity('${escAttr(cn)}')" onmouseleave="_isHoveringList=false; unhoverCommunity()">
+    html += `<div class="community-header" onclick="toggleCommunity(this,'${escAttr(cn)}')" onmouseenter="hoverCommunity('${escAttr(cn)}')" onmouseleave="unhoverCommunity()">
       <span class="ch-arrow ${isCollapsed ? '' : 'open'}">▶</span>
       <div style="flex:1;min-width:0"><div class="ch-name">${escHtml(cn)}</div>
       ${inlineStats.length ? `<div class="ch-stats-inline">${inlineStats.map(s => `<span>${s}</span>`).join('')}</div>` : ''}</div>
@@ -465,7 +482,7 @@ function renderTxCard(tx, idx) {
   const specialBadge = tx.is_special ? '<span class="special-badge">特殊</span>' : '';
   const parkingTag = tx.has_parking ? `<span class="tx-parking-tag">🚗 含車位${tx.parking_price > 0 ? ' ' + fmtWan(tx.parking_price) : ''}</span>` : '';
 
-  return `<div class="tx-card${isActive ? ' active' : ''}${priceClass}${tx.is_special ? ' special' : ''}" onclick="selectTx(${idx})" onmouseenter="_isHoveringList=true; hoverTx(${idx})" onmouseleave="_isHoveringList=false; unhoverTx()" data-idx="${idx}">
+  return `<div class="tx-card${isActive ? ' active' : ''}${priceClass}${tx.is_special ? ' special' : ''}" onclick="selectTx(${idx})" onmouseenter="hoverTx(${idx})" onmouseleave="unhoverTx()" data-idx="${idx}">
     ${colorDot}
     <div class="tx-price-col"><div class="tx-price">${fmtWan(tx.price)}</div><div class="tx-unit">${fmtUnitPrice(tx.unit_price_ping)}</div></div>
     <div class="tx-addr" title="${escAttr(tx.address)}">${escHtml(tx.address)}${specialBadge}</div>
@@ -731,9 +748,20 @@ function plotMarkers(fitBounds = true) {
 }
 
 function selectTx(idx) {
-  activeCardIdx = idx; renderResults();
+  activeCardIdx = idx;
+  document.querySelectorAll('.tx-card').forEach(card => {
+    if (parseInt(card.dataset.idx, 10) === idx) {
+      card.classList.add('active');
+    } else {
+      card.classList.remove('active');
+    }
+  });
   const tx = txData[idx];
-  if (tx && tx.lat && tx.lng) { map.setView([tx.lat, tx.lng], 17); }
+  if (tx && tx.lat && tx.lng) {
+    _hoverPanSuppressed = true;
+    map.setView([tx.lat, tx.lng], 17);
+    setTimeout(() => { _hoverPanSuppressed = false; }, 800);
+  }
 }
 
 // ── Marker tooltip ──
@@ -862,7 +890,7 @@ function updateLegend() {
 }
 function addLegend() {
   if (_legendControl) return;
-  _legendControl = L.control({ position: 'bottomleft' });
+  _legendControl = L.control({ position: 'bottomright' });
   _legendControl.onAdd = function () {
     _legendDiv = L.DomUtil.create('div', '');
     updateLegend();
@@ -1028,6 +1056,13 @@ document.addEventListener('keydown', e => {
 // ── Init ──
 document.addEventListener('DOMContentLoaded', () => {
   loadSettings(); initMap();
+
+  const sidebarEl = document.getElementById('sidebar');
+  if (sidebarEl) {
+    sidebarEl.addEventListener('mouseenter', () => { _isHoveringList = true; });
+    sidebarEl.addEventListener('mouseleave', () => { _isHoveringList = false; });
+  }
+
   try {
     const saved = localStorage.getItem('areaAutoSearch');
     if (saved === '1') { areaAutoSearch = true; const cb = document.getElementById('areaToggle'); if (cb) cb.checked = true; }
@@ -1042,6 +1077,10 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
   if (window.innerWidth <= 768) {
-    map.on('click', () => { document.getElementById('sidebar').classList.remove('show'); });
+    map.on('click', () => {
+      document.getElementById('sidebar').classList.remove('show');
+      _sidebarCollapsed = true;
+      updateHamburgerIcon();
+    });
   }
 });
