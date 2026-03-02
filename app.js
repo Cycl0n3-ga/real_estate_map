@@ -74,6 +74,13 @@ function isLotAddress(addr) { return /^\S*段\S*地號/.test(addr) || /段\d+地
 function getLocationMode() { const z = map ? map.getZoom() : 15; return z >= (markerSettings.osmZoom || 16) ? 'osm' : 'db'; }
 
 // ── Sidebar toggle ──
+function updateHamburgerIcon() {
+  const btn = document.getElementById('hamburgerBtn');
+  if (btn) {
+    btn.textContent = _sidebarCollapsed ? '▶' : '▼';
+  }
+}
+
 function toggleSidebar() {
   const sidebar = document.getElementById('sidebar');
   if (_sidebarCollapsed) {
@@ -91,6 +98,7 @@ function toggleSidebar() {
       collapseSidebar();
     }
   }
+  updateHamburgerIcon();
 }
 
 function collapseSidebar() {
@@ -98,6 +106,7 @@ function collapseSidebar() {
   sidebar.classList.add('collapsed');
   sidebar.classList.remove('show');
   _sidebarCollapsed = true;
+  updateHamburgerIcon();
 }
 
 // ── Filter panel ──
@@ -339,6 +348,14 @@ function unhoverCommunity() {
 async function doSearch() {
   const kw = document.getElementById('searchInput').value.trim();
   if (!kw && !getFilterParams() && !_selectedCommunity) { alert('請輸入搜尋關鍵字或選擇篩選條件'); return; }
+
+  // If there's no keyword and no selected community, but there ARE filters,
+  // delegate to area search instead to prevent backend 400 errors for missing keyword.
+  if (!kw && !_selectedCommunity) {
+    doAreaSearch();
+    return;
+  }
+
   hideAcList(); lastSearchType = 'keyword';
   const results = document.getElementById('results');
   results.innerHTML = '<div class="loading"><div class="skeleton" style="height:60px;margin:16px"></div><div class="skeleton" style="height:60px;margin:16px"></div></div>';
@@ -873,7 +890,7 @@ function updateLegend() {
 }
 function addLegend() {
   if (_legendControl) return;
-  _legendControl = L.control({ position: 'bottomleft' });
+  _legendControl = L.control({ position: 'bottomright' });
   _legendControl.onAdd = function () {
     _legendDiv = L.DomUtil.create('div', '');
     updateLegend();

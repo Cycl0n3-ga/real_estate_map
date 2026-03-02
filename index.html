@@ -29,7 +29,7 @@
   <nav class="navbar" id="navbar">
     <div class="nav-left">
       <div class="nav-logo">🏢 良富居</div>
-      <button class="hamburger" id="hamburgerBtn" onclick="toggleSidebar()" title="展開/收合側欄">☰</button>
+      <button class="hamburger" id="hamburgerBtn" onclick="toggleSidebar()" title="展開/收合側欄">▼</button>
       <div class="nav-search autocomplete-wrap" id="navSearch">
         <input id="searchInput" type="text" placeholder="搜尋地址 / 建案名稱…"
           onkeydown="handleSearchKeydown(event)" oninput="onSearchInput()" autocomplete="off">
@@ -42,9 +42,6 @@
     </div>
   </nav>
 
-  <!-- ═══ FILTER PANEL (DROPDOWN) ═══ -->
-  <div class="filter-dropdown" id="filterDropdown">
-    <div class="filter-grid">
       <div><label>建物型態</label>
         <select id="fBuildType">
           <option value="">全部</option>
@@ -61,19 +58,6 @@
       <div><label>單價 (萬/坪)</label><input id="fUnitPrice" type="text" placeholder="如 40-80"></div>
       <div><label>總價 (萬)</label><input id="fPrice" type="text" placeholder="如 1000-3000"></div>
       <div><label>歷年範圍</label><input id="fYear" type="text" placeholder="如: 110-114 或 2021-2025"></div>
-      <div class="filter-row-special">
-        <label style="display:flex;align-items:center;gap:4px;cursor:pointer;font-size:12px">
-          <input type="checkbox" id="fExcludeSpecial"> 排除特殊交易
-        </label>
-      </div>
-    </div>
-    <div class="filter-actions">
-      <button class="btn-clear" onclick="clearFilters()">清除</button>
-      <button class="btn-apply" onclick="applyFiltersAndSearch()">套用篩選</button>
-    </div>
-  </div>
-
-  <!-- ═══ SELECTED COMMUNITY ═══ -->
   <div id="selectedCommunity" class="selected-community" style="display:none">
     <span>🏠 <b id="selComName"></b></span>
     <button onclick="clearSelectedCommunity()">✖</button>
@@ -190,13 +174,44 @@
     </div>
 
     <!-- Tools -->
-    <div class="sidebar-tools" style="display:flex;gap:6px;padding:6px 12px;border-bottom:1px solid var(--border);align-items:center;">
+    <div class="sidebar-tools" style="display:flex;gap:6px;padding:6px 12px;border-bottom:1px solid var(--border);align-items:center;position:relative;">
       <button class="nav-filter-btn" onclick="toggleFilters()" id="filterToggleBtn" title="進階篩選" style="flex:1; justify-content:center;">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" />
         </svg>
         <span class="filter-label">篩選</span>
       </button>
+
+      <!-- FILTER PANEL -->
+      <div class="filter-dropdown" id="filterDropdown">
+        <div class="filter-grid">
+          <div><label>建物型態</label>
+            <select id="fBuildType">
+              <option value="">全部</option>
+              <option value="住宅大樓">住宅大樓(11樓含以上有電梯)</option>
+              <option value="華廈">華廈(10樓含以下有電梯)</option>
+              <option value="公寓">公寓(5樓含以下無電梯)</option>
+              <option value="透天厝">透天厝</option>
+              <option value="套房">套房(1房1廳1衛)</option>
+            </select>
+          </div>
+          <div><label>房數</label><input id="fRooms" type="text" placeholder="如 2,3,4"></div>
+          <div><label>坪數範圍</label><input id="fPing" type="text" placeholder="如 20-40"></div>
+          <div><label>公設比 %</label><input id="fRatio" type="text" placeholder="如 0-35"></div>
+          <div><label>單價 (萬/坪)</label><input id="fUnitPrice" type="text" placeholder="如 40-80"></div>
+          <div><label>總價 (萬)</label><input id="fPrice" type="text" placeholder="如 1000-3000"></div>
+          <div><label>歷年範圍</label><input id="fYear" type="text" placeholder="如: 110-114 或 2021-2025"></div>
+          <div class="filter-row-special">
+            <label style="display:flex;align-items:center;gap:4px;cursor:pointer;font-size:12px">
+              <input type="checkbox" id="fExcludeSpecial"> 排除特殊交易
+            </label>
+          </div>
+        </div>
+        <div class="filter-actions">
+          <button class="btn-clear" onclick="clearFilters()">清除</button>
+          <button class="btn-apply" onclick="applyFiltersAndSearch()">套用篩選</button>
+        </div>
+      </div>
     </div>
 
     <!-- Sort -->
