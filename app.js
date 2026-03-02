@@ -77,7 +77,7 @@ function getLocationMode() { const z = map ? map.getZoom() : 15; return z >= (ma
 function updateHamburgerIcon() {
   const btn = document.getElementById('hamburgerBtn');
   if (btn) {
-    btn.textContent = _sidebarCollapsed ? '▶' : '▼';
+    btn.textContent = _sidebarCollapsed ? '▶' : '◀';
   }
 }
 
@@ -90,10 +90,10 @@ function toggleSidebar() {
     // On mobile, add show class
     if (window.innerWidth <= 768) sidebar.classList.add('show');
   } else {
-    // On mobile, just toggle show
+    // collapse
     if (window.innerWidth <= 768) {
-      sidebar.classList.toggle('show');
-      _sidebarCollapsed = !sidebar.classList.contains('show');
+      sidebar.classList.remove('show');
+      _sidebarCollapsed = true;
     } else {
       collapseSidebar();
     }
@@ -1077,6 +1077,10 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
   if (window.innerWidth <= 768) {
-    map.on('click', () => { document.getElementById('sidebar').classList.remove('show'); });
+    map.on('click', () => {
+      document.getElementById('sidebar').classList.remove('show');
+      _sidebarCollapsed = true;
+      updateHamburgerIcon();
+    });
   }
 });
