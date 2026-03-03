@@ -4,7 +4,7 @@
    ══════════════════════════════════════════════════════════════ */
 
 // ── API 端點 ──
-const API_BASE = 'https://140.114.78.136:5001';
+const API_BASE = 'https://volodos.cs.nthu.edu.tw:5001';
 
 // ── 全域狀態 ──
 let map, markerClusterGroup, markerGroup;
