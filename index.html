@@ -174,7 +174,7 @@
   </div>
 
   <!-- ═══ SIDEBAR ═══ -->
-  <div class="sidebar" id="sidebar">
+  <div class="sidebar" :class="{ 'collapsed': ui.sidebarCollapsed, 'show': !ui.sidebarCollapsed && windowWidth <= 768 }" @mouseenter="ui.sidebarHovered = true" @mouseleave="ui.sidebarHovered = false">
     <!-- Quick Filters -->
     <div class="quick-filters">
       <span>快速:</span>
