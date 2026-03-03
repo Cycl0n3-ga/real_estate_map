@@ -24,6 +24,8 @@ let markerSettings = {
   contentMode: 'recent2yr',
   unitThresholds: [20, 45, 70], totalThresholds: [500, 1750, 3000],
   displayLogic: 'auto', osmZoom: 16, showLotAddr: false, yearFormat: 'roc',
+  useExactLocation: false, // dummy config for now
+  autoThresh14: 8000, autoThresh15: 5000, autoThresh16: 2000, autoThresh17: 0,
   areaUnit: 'ping',  // 'ping' | 'sqm'
   themeMode: 'light', // 'light' | 'dark'
   // Bivariate thresholds
@@ -730,10 +732,10 @@ function buildGroups() {
 }
 
 function getMinPriceThreshold(zoom) {
-  if (zoom <= 14) return 80000000;
-  if (zoom === 15) return 50000000;
-  if (zoom === 16) return 20000000;
-  return 0;
+  if (zoom <= 14) return (markerSettings.autoThresh14 || 8000) * 10000;
+  if (zoom === 15) return (markerSettings.autoThresh15 || 5000) * 10000;
+  if (zoom === 16) return (markerSettings.autoThresh16 || 2000) * 10000;
+  return (markerSettings.autoThresh17 || 0) * 10000;
 }
 
 function plotMarkers(fitBounds = true) {
@@ -1055,9 +1057,36 @@ function applySettings() {
   markerSettings.outerMode = document.getElementById('sOuter').value;
   markerSettings.innerMode = document.getElementById('sInner').value;
   markerSettings.showLotAddr = document.getElementById('sShowLotAddr').checked;
+
+  if (document.getElementById('sUseExactLocation')) {
+    markerSettings.useExactLocation = document.getElementById('sUseExactLocation').checked; // dummy
+  }
+
   markerSettings.yearFormat = document.getElementById('sYearFormat') ? document.getElementById('sYearFormat').value : 'roc';
   markerSettings.contentMode = document.getElementById('sContent') ? document.getElementById('sContent').value : 'recent2yr';
   if (document.getElementById('sDisplayLogic')) markerSettings.displayLogic = document.getElementById('sDisplayLogic').value;
+
+  if (document.getElementById('sThresh14')) {
+    const val = parseInt(document.getElementById('sThresh14').value, 10);
+    markerSettings.autoThresh14 = !isNaN(val) ? val : 8000;
+  }
+  if (document.getElementById('sThresh15')) {
+    const val = parseInt(document.getElementById('sThresh15').value, 10);
+    markerSettings.autoThresh15 = !isNaN(val) ? val : 5000;
+  }
+  if (document.getElementById('sThresh16')) {
+    const val = parseInt(document.getElementById('sThresh16').value, 10);
+    markerSettings.autoThresh16 = !isNaN(val) ? val : 2000;
+  }
+  if (document.getElementById('sThresh17')) {
+    const val = parseInt(document.getElementById('sThresh17').value, 10);
+    markerSettings.autoThresh17 = !isNaN(val) ? val : 0;
+  }
+
+  if (document.getElementById('autoFilterSettings')) {
+    document.getElementById('autoFilterSettings').style.display = markerSettings.displayLogic === 'auto' ? '' : 'none';
+  }
+
   markerSettings.osmZoom = 16;
   markerSettings.bubbleMode = document.getElementById('sBubbleMode').value;
   markerSettings.areaUnit = document.getElementById('sAreaUnit') ? document.getElementById('sAreaUnit').value : 'ping';
@@ -1102,6 +1131,20 @@ function loadSettings() {
   if (document.getElementById('sContent')) document.getElementById('sContent').value = markerSettings.contentMode || 'recent2yr';
   if (document.getElementById('sDisplayLogic')) document.getElementById('sDisplayLogic').value = markerSettings.displayLogic || 'auto';
   if (document.getElementById('sAreaUnit')) document.getElementById('sAreaUnit').value = markerSettings.areaUnit || 'ping';
+
+  if (document.getElementById('sUseExactLocation')) {
+    document.getElementById('sUseExactLocation').checked = !!markerSettings.useExactLocation;
+  }
+
+  if (document.getElementById('sThresh14')) document.getElementById('sThresh14').value = markerSettings.autoThresh14 !== undefined ? markerSettings.autoThresh14 : 8000;
+  if (document.getElementById('sThresh15')) document.getElementById('sThresh15').value = markerSettings.autoThresh15 !== undefined ? markerSettings.autoThresh15 : 5000;
+  if (document.getElementById('sThresh16')) document.getElementById('sThresh16').value = markerSettings.autoThresh16 !== undefined ? markerSettings.autoThresh16 : 2000;
+  if (document.getElementById('sThresh17')) document.getElementById('sThresh17').value = markerSettings.autoThresh17 !== undefined ? markerSettings.autoThresh17 : 0;
+
+  if (document.getElementById('autoFilterSettings')) {
+    document.getElementById('autoFilterSettings').style.display = markerSettings.displayLogic === 'auto' ? '' : 'none';
+  }
+
   document.getElementById('sBubbleMode').value = markerSettings.bubbleMode;
   document.getElementById('dualRingSettings').style.display = markerSettings.bubbleMode === 'dual_ring' ? '' : 'none';
   document.getElementById('bivariateSettings').style.display = markerSettings.bubbleMode === 'bivariate' ? '' : 'none';
