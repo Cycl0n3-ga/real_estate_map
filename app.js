@@ -530,9 +530,12 @@ const app = createApp({
       selectCommunity, clearSelectedCommunity, clearFilters, doSearch, doAreaSearch,
       locateMe: () => {
         if (!navigator.geolocation) return;
-        navigator.geolocation.getCurrentPosition((pos) => {
-          if (map) map.flyTo({ center: [pos.coords.longitude, pos.coords.latitude], zoom: 16 });
-        });
+        navigator.geolocation.getCurrentPosition(
+          (pos) => {
+            if (map) map.flyTo({ center: [pos.coords.longitude, pos.coords.latitude], zoom: 16 });
+          },
+          () => { alert('無法取得您的位置，請確認已授予位置存取權限。'); }
+        );
       },
       zoomIn: () => { map.zoomIn(); }, zoomOut: () => { map.zoomOut(); },
       setSort, rerunSearch, quickFilter, fmtWan, fmtAvgUnitWan, fmtUnitPrice, fmtAvgArea,
