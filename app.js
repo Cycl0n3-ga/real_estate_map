@@ -416,6 +416,31 @@ async function doAreaSearch() {
 function handleSearchResult(data, fitBounds = true) {
   txData = data.transactions || [];
   if (!markerSettings.showLotAddr) txData = txData.filter(tx => !isLotAddress(tx.address_raw || tx.address || ''));
+
+  // If this was a keyword/community search and we have a specific community match
+  // Filter out records from other counties/cities to avoid confusing mixed results (e.g. 帝寶 in Taipei vs elsewhere)
+  if (data.search_type !== 'area' && window._selectedCommunity) {
+    const mainCounty = data.district ? data.district.substring(0, 3) : '';
+    if (mainCounty) {
+       txData = txData.filter(tx => {
+           const txCounty = tx.district ? tx.district.substring(0, 3) : '';
+           return !txCounty || txCounty === mainCounty;
+       });
+    }
+  }
+
+  // Hide other communities when searching for a specific community or address
+  if (data.search_type !== 'area') {
+      const searchedName = data.community_name || window._selectedCommunity || document.getElementById('searchInput').value.trim();
+      if (searchedName) {
+         txData = txData.filter(tx => {
+             const cn = tx.community_name || '';
+             // Keep if it matches the searched name, or if it doesn't have a community name (it might be the address itself)
+             return !cn || cn.includes(searchedName) || searchedName.includes(cn);
+         });
+      }
+  }
+
   if (txData.length === 0) {
     document.getElementById('results').innerHTML = '<div class="empty">😢 沒有找到符合條件的資料</div>';
     document.getElementById('summaryBar').style.display = 'none';
@@ -927,9 +952,9 @@ function updateLegend() {
 }
 function addLegend() {
   if (_legendControl) return;
-  _legendControl = L.control({ position: 'bottomright' });
+  _legendControl = L.control({ position: 'bottomleft' });
   _legendControl.onAdd = function () {
-    _legendDiv = L.DomUtil.create('div', '');
+    _legendDiv = L.DomUtil.create('div', 'custom-legend-wrap');
     updateLegend();
     L.DomEvent.disableScrollPropagation(_legendDiv);
     L.DomEvent.disableClickPropagation(_legendDiv);
