@@ -1166,60 +1166,8 @@ function loadSettings() {
   if (document.getElementById('sThresh16')) document.getElementById('sThresh16').value = markerSettings.autoThresh16 !== undefined ? markerSettings.autoThresh16 : 2000;
   if (document.getElementById('sThresh17')) document.getElementById('sThresh17').value = markerSettings.autoThresh17 !== undefined ? markerSettings.autoThresh17 : 0;
 
-    Vue.provide("markerSettings", markerSettings);
-
-    return {
-      transactions, activeCardIdx, searchKeyword, loading, errorMsg, emptyMsg,
-      ui, markerSettings, areaAutoSearch, filters, windowWidth,
-      toggleSidebar, toggleSettings, toggleFilters, onSearchInput, handleSearchKeydown,
-      selectCommunity, clearSelectedCommunity, clearFilters, doSearch, doAreaSearch,
-      locateMe: async () => {
-        if (!navigator.geolocation) {
-          alert("您的瀏覽器不支援地理位置功能");
-          return;
-        }
-
-        // Handle iOS Safari specific permission
-        if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
-          try {
-            const permissionState = await DeviceOrientationEvent.requestPermission();
-            if (permissionState !== 'granted') {
-              console.warn('Device orientation permission not granted');
-            }
-          } catch (e) {
-            console.error('Error requesting orientation permission:', e);
-          }
-        }
-
-        loading.value = true;
-        navigator.geolocation.getCurrentPosition(
-          (position) => {
-            loading.value = false;
-            if (map) {
-               setHoverPanSuppressed(true);
-               map.flyTo({
-                  center: [position.coords.longitude, position.coords.latitude],
-                  zoom: 16
-               });
-               setTimeout(() => { setHoverPanSuppressed(false); }, 800);
-            }
-          },
-          (error) => {
-            loading.value = false;
-            let msg = '無法取得您的位置';
-            if (error.code === 1) msg = '您拒絕了定位權限，請在瀏覽器設定中允許';
-            if (error.code === 2) msg = '位置資訊無法使用 (網路或GPS錯誤)';
-            if (error.code === 3) msg = '取得位置逾時';
-            alert(msg);
-          },
-          { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
-        );
-      },
-      zoomIn: () => { map.zoomIn() }, zoomOut: () => { map.zoomOut() },
-      setSort, rerunSearch, quickFilter, fmtWan, fmtAvgUnitWan, fmtUnitPrice, fmtAvgArea,
-      resultGroups, noComItems, clusterGroups, toggleCommunity, hoverCommunity, unhoverCommunity,
-      selectTx, hoverTx, unhoverTx, closeClusterList
-    };
+  if (document.getElementById('autoFilterSettings')) {
+    document.getElementById('autoFilterSettings').style.display = markerSettings.displayLogic === 'auto' ? '' : 'none';
   }
 
   document.getElementById('sBubbleMode').value = markerSettings.bubbleMode;
@@ -1265,64 +1213,24 @@ document.addEventListener('DOMContentLoaded', () => {
     sidebarEl.addEventListener('mouseleave', () => { _isHoveringList = false; });
   }
 
-    // Logic to calculate color dot based on markerSettings
-    const colorDotStyle = computed(() => {
-        const getColor = (mode, val) => {
-            const th = mode === 'total_price' ? settings.totalThresholds : settings.unitThresholds;
-            const v = val / 10000;
-            if (v <= 0) return '#aaaaaa';
-            if (v <= th[0]) return 'hsl(155, 55%, 38%)';
-            if (v >= th[2]) return 'hsl(0, 65%, 48%)';
-            // Simple interpolation for UI dot
-            const ratio = (v - th[0]) / (th[2] - th[0]);
-            // Hue from 155 to 0
-            const h = 155 - (155 * ratio);
-            // Saturation from 55 to 65
-            const s = 55 + (10 * ratio);
-            // Lightness from 38 to 48
-            const l = 38 + (10 * ratio);
-            return `hsl(${h}, ${s}%, ${l}%)`;
-        };
-
-        if (settings.bubbleMode === 'bivariate') {
-             // simplified bivariate mapping
-             return { backgroundColor: '#7a8dba' }; // Default generic color
-        }
-
-        const outColor = getColor(settings.outerMode, settings.outerMode === 'total_price' ? props.tx.price : props.tx.unit_price_ping);
-        const inColor = getColor(settings.innerMode, settings.innerMode === 'total_price' ? props.tx.price : props.tx.unit_price_ping);
-
-        return {
-           width: '12px', height: '12px', borderRadius: '50%', flexShrink: 0,
-           background: inColor,
-           border: `3px solid ${outColor}`,
-           boxSizing: 'content-box'
-        };
+  try {
+    const saved = localStorage.getItem('areaAutoSearch');
+    if (saved === '1') { areaAutoSearch = true; const cb = document.getElementById('areaToggle'); if (cb) cb.checked = true; }
+  } catch (e) { }
+  window.addEventListener('resize', hideAcList);
+  // Close filter dropdown when clicking outside
+  document.addEventListener('click', e => {
+    const dd = document.getElementById('filterDropdown');
+    const btn = document.getElementById('filterToggleBtn');
+    if (dd.classList.contains('show') && !dd.contains(e.target) && !btn.contains(e.target)) {
+      dd.classList.remove('show'); btn.classList.remove('active');
+    }
+  });
+  if (window.innerWidth <= 768) {
+    map.on('click', () => {
+      document.getElementById('sidebar').classList.remove('show');
+      _sidebarCollapsed = true;
+      updateHamburgerIcon();
     });
-
-    return { fmtWan, fmtUnitPrice, fmtArea, formatDateStr, colorDotStyle };
-  },
-  template: `
-    <div class="tx-card" :class="{ active: isActive, special: tx.is_special }" @click="$emit('click')" @mouseenter="$emit('mouseenter')" @mouseleave="$emit('mouseleave')">
-      <div class="tx-color-dot" :style="colorDotStyle"></div>
-      <div class="tx-price-col">
-        <div class="tx-price">{{ fmtWan(tx.price) }}</div>
-        <div class="tx-unit">{{ fmtUnitPrice(tx.unit_price_ping) }}</div>
-      </div>
-      <div class="tx-addr" :title="tx.address">{{ tx.address }} <span v-if="tx.is_special" class="special-badge">特殊</span></div>
-      <div class="tx-community-row" v-if="tx.community_name">
-        <span class="tx-community-tag" :title="tx.community_name">{{ tx.community_name }}</span>
-      </div>
-      <div class="tx-detail-row">
-        <span>📅 {{ formatDateStr(tx.date_raw) }}</span>
-        <span>📐 {{ fmtArea(tx.area_sqm, tx.area_ping) }}</span>
-        <span>🏠 {{ tx.rooms || 0 }}房{{ tx.halls || 0 }}廳{{ tx.baths || 0 }}衛</span>
-        <span v-if="tx.floor">🏢 {{ tx.floor }}F/{{ tx.total_floors }}F</span>
-        <span v-if="tx.public_ratio > 0" class="tag">公設{{ tx.public_ratio }}%</span>
-        <span v-if="tx.building_type" class="tag">{{ tx.building_type }}</span>
-        <span v-if="tx.has_parking" class="tx-parking-tag">🚗 含車位{{ tx.parking_price > 0 ? ' ' + fmtWan(tx.parking_price) : '' }}</span>
-        <span v-if="tx.note" style="color:var(--text3);font-size:10px">📝 {{ tx.note.length > 30 ? tx.note.substring(0, 30) + '…' : tx.note }}</span>
-      </div>
-    </div>
-  `
+  }
 });
