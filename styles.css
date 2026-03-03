@@ -518,6 +518,8 @@ html, body {
 }
 .highlight-val { font-weight:700; color:var(--primary); }
 
+.custom-legend-wrap { margin-bottom: 24px !important; margin-left: 12px !important; }
+
 /* Area toggle */
 .area-toggle-wrap { display:flex; align-items:center; gap:6px; }
 .area-toggle { position:relative; display:inline-block; width:34px; height:18px; flex-shrink:0; }
@@ -667,7 +669,7 @@ body.dark-mode .special-badge {
   .tx-price { font-size:16px; }
   .community-stats { grid-template-columns:repeat(3,1fr); }
   .nav-search input { font-size:16px; }
-  .map-controls { bottom:150px; right:8px; }
+  .map-controls { bottom:calc(50dvh + env(safe-area-inset-bottom) + 12px); right:8px; }
   .map-controls button { width:36px; height:36px; font-size:16px; }
   .settings-panel { width:100%; max-width:100vw; border-radius:0; }
   .selected-community { left:10px; top:calc(var(--navbar-h) + 4px); }
