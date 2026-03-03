@@ -528,16 +528,49 @@ const app = createApp({
       ui, markerSettings, areaAutoSearch, filters, windowWidth,
       toggleSidebar, toggleSettings, toggleFilters, onSearchInput, handleSearchKeydown,
       selectCommunity, clearSelectedCommunity, clearFilters, doSearch, doAreaSearch,
-      locateMe: () => {
-        if (!navigator.geolocation) return;
+      locateMe: async () => {
+        if (!navigator.geolocation) {
+          alert("您的瀏覽器不支援地理位置功能");
+          return;
+        }
+
+        // Handle iOS Safari specific permission
+        if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
+          try {
+            const permissionState = await DeviceOrientationEvent.requestPermission();
+            if (permissionState !== 'granted') {
+              console.warn('Device orientation permission not granted');
+            }
+          } catch (e) {
+            console.error('Error requesting orientation permission:', e);
+          }
+        }
+
+        loading.value = true;
         navigator.geolocation.getCurrentPosition(
-          (pos) => {
-            if (map) map.flyTo({ center: [pos.coords.longitude, pos.coords.latitude], zoom: 16 });
+          (position) => {
+            loading.value = false;
+            if (map) {
+               setHoverPanSuppressed(true);
+               map.flyTo({
+                  center: [position.coords.longitude, position.coords.latitude],
+                  zoom: 16
+               });
+               setTimeout(() => { setHoverPanSuppressed(false); }, 800);
+            }
           },
-          () => { alert('無法取得您的位置，請確認已授予位置存取權限。'); }
+          (error) => {
+            loading.value = false;
+            let msg = '無法取得您的位置';
+            if (error.code === 1) msg = '您拒絕了定位權限，請在瀏覽器設定中允許';
+            if (error.code === 2) msg = '位置資訊無法使用 (網路或GPS錯誤)';
+            if (error.code === 3) msg = '取得位置逾時';
+            alert(msg);
+          },
+          { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
         );
       },
-      zoomIn: () => { map.zoomIn(); }, zoomOut: () => { map.zoomOut(); },
+      zoomIn: () => { map.zoomIn() }, zoomOut: () => { map.zoomOut() },
       setSort, rerunSearch, quickFilter, fmtWan, fmtAvgUnitWan, fmtUnitPrice, fmtAvgArea,
       resultGroups, noComItems, clusterGroups, toggleCommunity, hoverCommunity, unhoverCommunity,
       selectTx, hoverTx, unhoverTx, closeClusterList
@@ -583,17 +616,46 @@ app.component('tx-card', {
       return s;
     };
 
-    // Add logic to calculate color dot here (can be simplified if map styling takes over entirely, but needed for sidebar)
+    // Logic to calculate color dot based on markerSettings
     const colorDotStyle = computed(() => {
-        // Mock style to keep the card visually similar, can refine later if needed
-        return { display: 'none' };
+        const getColor = (mode, val) => {
+            const th = mode === 'total_price' ? settings.totalThresholds : settings.unitThresholds;
+            const v = val / 10000;
+            if (v <= 0) return '#aaaaaa';
+            if (v <= th[0]) return 'hsl(155, 55%, 38%)';
+            if (v >= th[2]) return 'hsl(0, 65%, 48%)';
+            // Simple interpolation for UI dot
+            const ratio = (v - th[0]) / (th[2] - th[0]);
+            // Hue from 155 to 0
+            const h = 155 - (155 * ratio);
+            // Saturation from 55 to 65
+            const s = 55 + (10 * ratio);
+            // Lightness from 38 to 48
+            const l = 38 + (10 * ratio);
+            return `hsl(${h}, ${s}%, ${l}%)`;
+        };
+
+        if (settings.bubbleMode === 'bivariate') {
+             // simplified bivariate mapping
+             return { backgroundColor: '#7a8dba' }; // Default generic color
+        }
+
+        const outColor = getColor(settings.outerMode, settings.outerMode === 'total_price' ? props.tx.price : props.tx.unit_price_ping);
+        const inColor = getColor(settings.innerMode, settings.innerMode === 'total_price' ? props.tx.price : props.tx.unit_price_ping);
+
+        return {
+           width: '12px', height: '12px', borderRadius: '50%', flexShrink: 0,
+           background: inColor,
+           border: `3px solid ${outColor}`,
+           boxSizing: 'content-box'
+        };
     });
 
     return { fmtWan, fmtUnitPrice, fmtArea, formatDateStr, colorDotStyle };
   },
   template: `
     <div class="tx-card" :class="{ active: isActive, special: tx.is_special }" @click="$emit('click')" @mouseenter="$emit('mouseenter')" @mouseleave="$emit('mouseleave')">
-      <!-- color dot omitted for brevity, but map provides colors -->
+      <div class="tx-color-dot" :style="colorDotStyle"></div>
       <div class="tx-price-col">
         <div class="tx-price">{{ fmtWan(tx.price) }}</div>
         <div class="tx-unit">{{ fmtUnitPrice(tx.unit_price_ping) }}</div>
