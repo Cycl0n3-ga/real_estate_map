@@ -1,618 +1,1236 @@
-import { doSearchApi, doAreaSearchApi, fetchAcResults } from "./api.js";
-import {
-  updateMapHighlight,
-  initMap,
-  updateMapData,
-  applyLayers,
-  applyClusterLayers,
-  setMapHandlers,
-  getHoverPanSuppressed,
-  setHoverPanSuppressed,
-  map
-} from "./map.js";
+/* ══════════════════════════════════════════════════════════════
+   app.js — 良富居地產 前端應用
+   前後端分離版 · GitHub Pages 部署
+   ══════════════════════════════════════════════════════════════ */
 
-const { createApp, ref, reactive, computed, watch, onMounted, nextTick } = Vue;
+// ── API 端點 ──
+const API_BASE = 'https://volodos.cs.nthu.edu.tw:5001';
 
-const app = createApp({
-  setup() {
-    const API_BASE = 'https://volodos.cs.nthu.edu.tw:5001';
+// ── 全域狀態 ──
+let map, markerClusterGroup, markerGroup;
+let txData = [];
+let activeCardIdx = -1;
+let currentSort = 'date';
+let sortDirection = 'desc';
+let lastSearchType = '';
+let locationMarker, locationCircle;
+let collapsedCommunities = {};
+let _lastBouncingEls = [];
+let communitySummaries = {};
+const PING_TO_SQM = 3.305785;  // 1坪 = 3.305785 m²
+let markerSettings = {
+  bubbleMode: 'dual_ring',  // 'dual_ring' | 'bivariate'
+  outerMode: 'unit_price', innerMode: 'total_price',
+  contentMode: 'recent2yr',
+  unitThresholds: [20, 45, 70], totalThresholds: [500, 1750, 3000],
+  displayLogic: 'auto', osmZoom: 16, showLotAddr: false, yearFormat: 'roc',
+  useExactLocation: false, // dummy config for now
+  autoThresh14: 8000, autoThresh15: 5000, autoThresh16: 2000, autoThresh17: 0,
+  areaUnit: 'ping',  // 'ping' | 'sqm'
+  themeMode: 'light', // 'light' | 'dark'
+  // Bivariate thresholds
+  bivUnitQ: [25, 40, 60], bivTotalQ: [800, 1500, 2500],
+};
+let areaAutoSearch = true;
+let _areaSearchTimer = null;
+let _hoverPanSuppressed = false;
+let _sidebarCollapsed = false;
+let _isHoveringList = false;
 
-    // Global State
-    const transactions = ref([]);
-    const activeCardIdx = ref(-1);
-    const searchKeyword = ref('');
-    const loading = ref(false);
-    const errorMsg = ref('');
-    const emptyMsg = ref('');
-
-    // UI State
-    const ui = reactive({
-      sidebarCollapsed: false,
-      sidebarHovered: false,
-      settingsVisible: false,
-      filterVisible: false,
-      acVisible: false,
-      acResults: [],
-      acIdx: -1,
-      selectedCommunity: null,
-      communityName: '',
-      summary: null,
-      communitySummaries: {},
-      collapsedCommunities: {},
-      isAreaSearch: false,
-      clusterItems: [],
-      showingClusterList: false
-    });
-
-    // Settings
-    const markerSettings = reactive({
-      bubbleMode: 'dual_ring',
-      outerMode: 'unit_price',
-      innerMode: 'total_price',
-      contentMode: 'recent2yr',
-      unitThresholds: [20, 45, 70],
-      totalThresholds: [500, 1750, 3000],
-      displayLogic: 'auto',
-      osmZoom: 16,
-      showLotAddr: false,
-      yearFormat: 'roc',
-      useExactLocation: false,
-      autoThresh14: 8000,
-      autoThresh15: 5000,
-      autoThresh16: 2000,
-      autoThresh17: 0,
-      areaUnit: 'ping',
-      themeMode: 'light',
-      bivUnitQ: [25, 40, 60],
-      bivTotalQ: [800, 1500, 2500]
-    });
-
-    const areaAutoSearch = ref(true);
-    const windowWidth = ref(window.innerWidth);
-    window.addEventListener('resize', () => { windowWidth.value = window.innerWidth; });
-
-    // Filters
-    const filters = reactive({
-      fBuildType: '',
-      fRooms: '',
-      fPing: '',
-      fRatio: '',
-      fUnitPrice: '',
-      fPrice: '',
-      fYear: '',
-      fExcludeSpecial: false,
-      limitSelect: 2500,
-      currentSort: 'date',
-      sortDirection: 'desc'
-    });
-
-    // We will progressively add functions here
-
-    const toggleSidebar = () => {
-      ui.sidebarCollapsed = !ui.sidebarCollapsed;
-      if (window.innerWidth <= 768 && !ui.sidebarCollapsed) {
-        ui.filterVisible = false; // ensure filter is closed
-      }
-    };
-
-    const toggleSettings = () => {
-      ui.settingsVisible = !ui.settingsVisible;
-    };
-
-    const toggleFilters = () => {
-      ui.filterVisible = !ui.filterVisible;
-    };
-
-    const onSearchInput = () => {
-      ui.selectedCommunity = null;
-      if (searchKeyword.value.length < 2) {
-        ui.acVisible = false;
-        return;
-      }
-      if (window._acTimer) clearTimeout(window._acTimer);
-      window._acTimer = setTimeout(async () => {
-        ui.acResults = await fetchAcResults(searchKeyword.value);
-        if (ui.acResults.length > 0) {
-           ui.acIdx = -1;
-           ui.acVisible = true;
-        } else {
-           ui.acVisible = false;
-        }
-      }, 250);
-    };
-
-    const handleSearchKeydown = (e) => {
-      if (ui.acVisible && ui.acResults.length > 0) {
-        if (e.key === 'ArrowDown') { e.preventDefault(); ui.acIdx = Math.min(ui.acIdx + 1, ui.acResults.length - 1); return; }
-        if (e.key === 'ArrowUp') { e.preventDefault(); ui.acIdx = Math.max(ui.acIdx - 1, -1); return; }
-        if (e.key === 'Enter' && ui.acIdx >= 0) { e.preventDefault(); selectCommunity(ui.acResults[ui.acIdx].name); return; }
-      }
-      if (e.key === 'Escape') { ui.acVisible = false; return; }
-      if (e.key === 'Enter') doSearch();
-    };
-
-    const selectCommunity = (name) => {
-      ui.selectedCommunity = name;
-      searchKeyword.value = name;
-      ui.acVisible = false;
-      doSearch();
-    };
-
-    const clearSelectedCommunity = () => {
-      ui.selectedCommunity = null;
-      searchKeyword.value = '';
-      ui.isAreaSearch = false;
-    };
-
-    const clearFilters = () => {
-      filters.fBuildType = '';
-      filters.fRooms = '';
-      filters.fPing = '';
-      filters.fRatio = '';
-      filters.fUnitPrice = '';
-      filters.fPrice = '';
-      filters.fYear = '';
-      filters.fExcludeSpecial = false;
-    };
-
-    const getFilterParams = () => {
-      let p = '';
-      if (filters.fBuildType) p += `&building_type=${encodeURIComponent(filters.fBuildType)}`;
-      if (filters.fRooms) p += `&rooms=${encodeURIComponent(filters.fRooms)}`;
-      if (filters.fPing) p += `&ping=${encodeURIComponent(filters.fPing)}`;
-      if (filters.fRatio) p += `&public_ratio=${encodeURIComponent(filters.fRatio)}`;
-      if (filters.fUnitPrice) p += `&unit_price=${encodeURIComponent(filters.fUnitPrice)}`;
-      if (filters.fPrice) p += `&price=${encodeURIComponent(filters.fPrice)}`;
-      if (filters.fYear) p += `&year=${encodeURIComponent(filters.fYear)}`;
-      if (filters.fExcludeSpecial) p += `&exclude_special=1`;
-      return p;
-    };
-
-    const handleSearchResult = (data, fitBounds = true) => {
-      loading.value = false;
-      ui.showingClusterList = false;
-      ui.communityName = ui.selectedCommunity || searchKeyword.value;
-
-      let txs = data.transactions || [];
-      // Assign unique ID if missing
-      txs.forEach((tx, idx) => {
-        if (!tx.id) tx.id = `temp_id_${idx}`;
-        tx.origIdx = idx;
-      });
-
-      transactions.value = txs;
-
-      // Filter lot address
-      if (!markerSettings.showLotAddr) {
-        transactions.value = transactions.value.filter(tx => !(/^\S*段\S*地號/.test(tx.address_raw || tx.address || '') || /段\d+地號/.test(tx.address_raw || tx.address || '')));
-      }
-
-      if (transactions.value.length === 0) {
-        emptyMsg.value = '😢 沒有找到符合條件的資料';
-        ui.summary = null;
-        updateMapData([], fitBounds, markerSettings);
-        return;
-      }
-
-      emptyMsg.value = '';
-      ui.summary = data.summary || {};
-      ui.communitySummaries = data.community_summaries || {};
-      ui.isAreaSearch = data.search_type === 'area';
-
-      // Compute collapsed state
-      ui.collapsedCommunities = {};
-      if (ui.isAreaSearch) {
-        const cNames = [...new Set(transactions.value.map(tx => tx.community_name).filter(Boolean))];
-        cNames.forEach(cn => { ui.collapsedCommunities[cn] = true; });
-      }
-
-      // Sort data
-      sortData(filters.currentSort);
-
-      // Render to map
-      updateMapData(transactions.value, fitBounds, markerSettings);
-
-      if (window.innerWidth <= 768) ui.sidebarCollapsed = false;
-    };
-
-    const getLocationMode = () => {
-      const z = map ? map.getZoom() : 15;
-      return z >= markerSettings.osmZoom ? 'osm' : 'db';
-    };
-
-    const doSearch = async () => {
-      if (window._acTimer) clearTimeout(window._acTimer);
-      const kw = searchKeyword.value.trim();
-      if (!kw && !getFilterParams() && !ui.selectedCommunity) { alert('請輸入搜尋關鍵字或選擇篩選條件'); return; }
-
-      if (!kw && !ui.selectedCommunity) {
-        doAreaSearch();
-        return;
-      }
-
-      ui.acVisible = false;
-      ui.lastSearchType = 'keyword';
-      loading.value = true;
-      emptyMsg.value = '';
-      transactions.value = [];
-
-      const res = await doSearchApi(kw, filters.limitSelect, getLocationMode(), getFilterParams(), ui.selectedCommunity);
-      if (res.success) {
-        handleSearchResult(res);
-      } else {
-        loading.value = false;
-        emptyMsg.value = res.error;
-      }
-    };
-
-    const doAreaSearch = async () => {
-      if (!map) return;
-      const bounds = map.getBounds();
-      ui.lastSearchType = 'area';
-      loading.value = true;
-      emptyMsg.value = '';
-      transactions.value = [];
-
-      const res = await doAreaSearchApi(bounds, filters.limitSelect, getLocationMode(), getFilterParams());
-      if (res.aborted) return;
-
-      if (res.success) {
-        if (!res.transactions || res.transactions.length === 0) {
-           loading.value = false;
-           emptyMsg.value = '😢 此區域沒有成交紀錄<br><span style="font-size:12px">試試放大地圖或移動到其他區域</span>';
-           ui.summary = null;
-           updateMapData([], false, markerSettings);
-           return;
-        }
-        handleSearchResult(res, false);
-      } else {
-        loading.value = false;
-        emptyMsg.value = res.error;
-      }
-    };
-
-    const sortData = (sortType) => {
-      const dir = filters.sortDirection === 'asc' ? 1 : -1;
-      const sorters = {
-        date: (a, b) => dir * ((b.date_raw || '').localeCompare(a.date_raw || '')),
-        price: (a, b) => dir * ((b.price || 0) - (a.price || 0)),
-        unit_price: (a, b) => dir * ((b.unit_price_ping || 0) - (a.unit_price_ping || 0)),
-        ping: (a, b) => dir * ((b.area_ping || 0) - (a.area_ping || 0)),
-        public_ratio: (a, b) => dir * ((a.public_ratio || 999) - (b.public_ratio || 999)),
-        community: (a, b) => {
-          const ca = a.community_name || '', cb = b.community_name || '';
-          if (ca && !cb) return -1; if (!ca && cb) return 1;
-          if (ca !== cb) return dir * ca.localeCompare(cb);
-          return dir * ((b.date_raw || '').localeCompare(a.date_raw || ''));
-        }
-      };
-      if (sorters[sortType]) {
-        transactions.value.sort(sorters[sortType]);
-      }
-    };
-
-    const setSort = (newSort) => {
-      if (filters.currentSort === newSort) {
-        filters.sortDirection = filters.sortDirection === 'desc' ? 'asc' : 'desc';
-      } else {
-        filters.currentSort = newSort;
-        filters.sortDirection = 'desc';
-      }
-      if (transactions.value.length > 0) {
-        sortData(filters.currentSort);
-      }
-    };
-
-    const rerunSearch = () => {
-      if (ui.lastSearchType === 'area') doAreaSearch();
-      else if (ui.lastSearchType === 'keyword') doSearch();
-    };
-
-    const quickFilter = (mode) => {
-      const nowYear = new Date().getFullYear() - 1911;
-      if (mode === '1yr') {
-        filters.fYear = `${nowYear - 1}-${nowYear}`;
-        ui.qfMode = '1yr';
-      } else if (mode === '2yr') {
-        filters.fYear = `${nowYear - 2}-${nowYear}`;
-        ui.qfMode = '2yr';
-      } else if (mode === 'nospecial') {
-        filters.fExcludeSpecial = !filters.fExcludeSpecial;
-        ui.qfMode = filters.fExcludeSpecial ? 'nospecial' : '';
-      } else if (mode === 'clear') {
-        clearFilters();
-        ui.qfMode = '';
-        if (transactions.value.length > 0) rerunSearch();
-        return;
-      }
-      if (transactions.value.length > 0) rerunSearch();
-    };
-
-    // Formatters for templates
-    const PING_TO_SQM = 3.305785;
-    const fmtWan = (v) => { if (!v || v <= 0) return '-'; const w = v / 10000; return w >= 10000 ? (w / 10000).toFixed(1) + '億' : Math.round(w) + '萬'; };
-    const fmtUnitPrice = (up) => {
-      if (markerSettings.areaUnit === 'sqm') {
-        if (up <= 0) return '-';
-        return Math.round(up / PING_TO_SQM / 10000) + '萬/m²';
-      }
-      return up > 0 ? Math.round(up / 10000) + '萬/坪' : '-';
-    };
-    const fmtAvgUnitWan = (up) => {
-      if (markerSettings.areaUnit === 'sqm') {
-        if (up <= 0) return '-';
-        return (up / PING_TO_SQM / 10000).toFixed(1) + '萬/m²';
-      }
-      return up > 0 ? (up / 10000).toFixed(1) + '萬/坪' : '-';
-    };
-    const fmtAvgArea = (ping) => {
-      if (markerSettings.areaUnit === 'sqm') {
-        const m2 = ping > 0 ? ping * PING_TO_SQM : 0;
-        return m2 > 0 ? m2.toFixed(1) + ' m²' : '-';
-      }
-      return ping > 0 ? ping.toFixed(1) + '坪' : '-';
-    };
-
-    // Grouping computation
-    const resultGroups = computed(() => {
-      const groupsMap = {};
-      const noComItems = [];
-      const groups = [];
-
-      transactions.value.forEach((tx, i) => {
-        const cn = tx.community_name || '';
-        if (cn) {
-          if (!(cn in groupsMap)) {
-            groupsMap[cn] = groups.length;
-            groups.push({ name: cn, items: [], stats: null });
-          }
-          groups[groupsMap[cn]].items.push({ tx, origIdx: i });
-        } else {
-          noComItems.push({ tx, origIdx: i });
-        }
-      });
-
-      groups.forEach(g => {
-        g.stats = ui.communitySummaries[g.name] || computeLocalStats(g.items);
-      });
-
-      return groups;
-    });
-
-    const computeLocalStats = (items) => {
-      if (!items || items.length === 0) return null;
-      let prices = [], ups = [], pings = [], ratios = [];
-      items.forEach(({ tx }) => { if (tx.price > 0) prices.push(tx.price); if (tx.unit_price_ping > 0) ups.push(tx.unit_price_ping); if (tx.area_ping > 0) pings.push(tx.area_ping); if (tx.public_ratio > 0) ratios.push(tx.public_ratio); });
-      const avg = arr => arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : 0;
-      return { count: items.length, avg_price: Math.round(avg(prices)), avg_unit_price_ping: avg(ups), avg_ping: avg(pings), avg_ratio: avg(ratios) };
-    };
-
-    const noComItems = computed(() => {
-      return transactions.value.filter(tx => !tx.community_name).map((tx, i) => ({ tx, origIdx: i }));
-    });
-
-    const clusterGroups = computed(() => {
-      const groups = {};
-      ui.clusterItems.forEach(tx => {
-        const cn = tx.community_name || '其他';
-        if (!groups[cn]) groups[cn] = [];
-        groups[cn].push(tx);
-      });
-      return groups;
-    });
-
-    const toggleCommunity = (name) => {
-      ui.collapsedCommunities[name] = !ui.collapsedCommunities[name];
-    };
-
-    const hoverCommunity = (name) => { updateMapHighlight(transactions.value.filter(t => t.community_name === name || (name.name && t.community_name === name.name)).map(t => t.id));
-      // Logic for map hovering
-    };
-
-    const unhoverCommunity = () => { updateMapHighlight(null);
-    };
-
-    const selectTx = (tx) => {
-      activeCardIdx.value = tx.id;
-      if (tx.lat && tx.lng && map) {
-        setHoverPanSuppressed(true);
-        map.flyTo({ center: [tx.lng, tx.lat], zoom: 17 });
-        setTimeout(() => { setHoverPanSuppressed(false); }, 800);
-      }
-    };
-
-    const hoverTx = (tx) => { updateMapHighlight([tx.id]);
-      // Find on map
-    };
-
-    const unhoverTx = () => { updateMapHighlight(null);
-    };
-
-    const closeClusterList = () => {
-      ui.showingClusterList = false;
-      if (window.innerWidth <= 768) ui.sidebarCollapsed = false;
-    };
-
-    // Watchers for Settings
-    watch(markerSettings, (newSettings) => {
-      localStorage.setItem('markerSettings', JSON.stringify(newSettings));
-      if (newSettings.themeMode === 'dark') {
-        document.body.classList.add('dark-mode');
-      } else {
-        document.body.classList.remove('dark-mode');
-      }
-
-      // Update Map Layers
-      if (map && map.getStyle()) {
-        applyLayers(newSettings);
-        applyClusterLayers(newSettings);
-      }
-    }, { deep: true });
-
-    onMounted(() => {
-      // Load Settings from LocalStorage
-      try {
-        const saved = localStorage.getItem('markerSettings');
-        if (saved) {
-          Object.assign(markerSettings, JSON.parse(saved));
-        }
-        const savedArea = localStorage.getItem('areaAutoSearch');
-        if (savedArea !== null) {
-          areaAutoSearch.value = savedArea === '1';
-        }
-      } catch (e) {}
-
-      // Init MapLibre
-      initMap();
-
-      // Setup Map Handlers
-      setMapHandlers({
-        onMapMoveEnd: () => {
-          if (ui.sidebarHovered || !areaAutoSearch.value || getHoverPanSuppressed()) return;
-          if (map.getZoom() < markerSettings.osmZoom) return;
-
-          if (window._areaSearchTimer) clearTimeout(window._areaSearchTimer);
-          window._areaSearchTimer = setTimeout(() => {
-            if (!getHoverPanSuppressed() && areaAutoSearch.value && map.getZoom() >= markerSettings.osmZoom) {
-              doAreaSearch();
-            }
-          }, 800);
-        },
-        onMapZoomEnd: () => {},
-        onMapClick: () => {
-          if (window.innerWidth <= 768) {
-             ui.sidebarCollapsed = true;
-          }
-        },
-        onMarkerHover: (data) => {
-          if (!data) {
-             updateMapHighlight(null);
-             activeCardIdx.value = -1;
-             return;
-          }
-          if (data.isCluster) {
-             // hover cluster
-          } else {
-             // hover point
-             activeCardIdx.value = data.id || data.origIdx;
-             updateMapHighlight([data.id || data.origIdx]);
-
-             // Scroll to item in list
-             const el = document.getElementById(`tx-item-${activeCardIdx.value}`);
-             if (el && !ui.sidebarHovered) {
-                el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-             }
-          }
-        },
-        onMarkerClick: (type, data) => {
-          if (type === 'cluster') {
-             // Show cluster list
-             // Match MapLibre features properties to Vue `transactions` elements
-             const leafIds = data.map(d => d.id || d.origIdx);
-             ui.clusterItems = transactions.value.filter(tx => leafIds.includes(tx.id || tx.origIdx));
-             ui.showingClusterList = true;
-             if (window.innerWidth <= 768) ui.sidebarCollapsed = false;
-          } else if (type === 'point') {
-             // Select point
-             activeCardIdx.value = data.id || data.origIdx;
-             if (window.innerWidth <= 768) ui.sidebarCollapsed = false;
-          }
-        }
-      });
-    });
-
-    Vue.provide("markerSettings", markerSettings);
-
-    return {
-      transactions, activeCardIdx, searchKeyword, loading, errorMsg, emptyMsg,
-      ui, markerSettings, areaAutoSearch, filters, windowWidth,
-      toggleSidebar, toggleSettings, toggleFilters, onSearchInput, handleSearchKeydown,
-      selectCommunity, clearSelectedCommunity, clearFilters, doSearch, doAreaSearch,
-      locateMe: () => {
-        if (!navigator.geolocation) return;
-        navigator.geolocation.getCurrentPosition(
-          (pos) => {
-            if (map) map.flyTo({ center: [pos.coords.longitude, pos.coords.latitude], zoom: 16 });
-          },
-          () => { alert('無法取得您的位置，請確認已授予位置存取權限。'); }
-        );
-      },
-      zoomIn: () => { map.zoomIn(); }, zoomOut: () => { map.zoomOut(); },
-      setSort, rerunSearch, quickFilter, fmtWan, fmtAvgUnitWan, fmtUnitPrice, fmtAvgArea,
-      resultGroups, noComItems, clusterGroups, toggleCommunity, hoverCommunity, unhoverCommunity,
-      selectTx, hoverTx, unhoverTx, closeClusterList
-    };
+// ── Utility ──
+const escHtml = s => s ? String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;') : '';
+const escAttr = s => s ? String(s).replace(/'/g, '&#39;').replace(/"/g, '&quot;').replace(/</g, '&lt;') : '';
+const cssId = s => s ? s.replace(/[^a-zA-Z0-9\u4e00-\u9fff]/g, '_') : '';
+function fmtWan(v) { if (!v || v <= 0) return '-'; const w = v / 10000; return w >= 10000 ? (w / 10000).toFixed(1) + '億' : Math.round(w) + '萬'; }
+function fmtArea(sqm, ping) {
+  if (markerSettings.areaUnit === 'sqm') {
+    const m2 = sqm > 0 ? sqm : (ping > 0 ? ping * PING_TO_SQM : 0);
+    return m2 > 0 ? m2.toFixed(1) + ' m²' : '-';
   }
-});
+  return ping > 0 ? ping.toFixed(1) + '坪' : (sqm > 0 ? (sqm / PING_TO_SQM).toFixed(1) + '坪' : '-');
+}
+function fmtUnitPrice(unitPricePing) {
+  if (markerSettings.areaUnit === 'sqm') {
+    if (unitPricePing <= 0) return '-';
+    const perSqm = unitPricePing / PING_TO_SQM;
+    return Math.round(perSqm / 10000) + '萬/m²';
+  }
+  return unitPricePing > 0 ? Math.round(unitPricePing / 10000) + '萬/坪' : '-';
+}
+function fmtAvgArea(avgPing) {
+  if (markerSettings.areaUnit === 'sqm') {
+    const m2 = avgPing > 0 ? avgPing * PING_TO_SQM : 0;
+    return m2 > 0 ? m2.toFixed(1) + ' m²' : '-';
+  }
+  return avgPing > 0 ? avgPing.toFixed(1) + '坪' : '-';
+}
+function fmtAvgUnitWan(unitPricePing) {
+  if (markerSettings.areaUnit === 'sqm') {
+    if (unitPricePing <= 0) return '-';
+    return (unitPricePing / PING_TO_SQM / 10000).toFixed(1) + '萬/m²';
+  }
+  return unitPricePing > 0 ? (unitPricePing / 10000).toFixed(1) + '萬/坪' : '-';
+}
+function areaLabel() { return markerSettings.areaUnit === 'sqm' ? 'm²' : '坪'; }
+function isLotAddress(addr) { return /^\S*段\S*地號/.test(addr) || /段\d+地號/.test(addr); }
+function getLocationMode() { const z = map ? map.getZoom() : 15; return z >= (markerSettings.osmZoom || 16) ? 'osm' : 'db'; }
 
+// ── Sidebar toggle ──
+function updateHamburgerIcon() {
+  const btn = document.getElementById('hamburgerBtn');
+  if (btn) {
+    if (window.innerWidth <= 768) {
+      btn.textContent = _sidebarCollapsed ? '▲' : '▼';
+    } else {
+      btn.textContent = _sidebarCollapsed ? '▶' : '◀';
+    }
+  }
+}
 
-// We need to define a Vue component for TxCard
-app.component('tx-card', {
-  props: ['tx', 'isActive'],
-  setup(props) {
-    // Utility functions inherited from parent scope are not automatically available in components,
-    // so we provide them here.
-    const PING_TO_SQM = 3.305785;
-    const settings = Vue.inject('markerSettings');
+function toggleSidebar() {
+  const sidebar = document.getElementById('sidebar');
+  if (_sidebarCollapsed) {
+    // expand
+    sidebar.classList.remove('collapsed');
+    _sidebarCollapsed = false;
+    // On mobile, add show class
+    if (window.innerWidth <= 768) sidebar.classList.add('show');
+  } else {
+    // collapse
+    if (window.innerWidth <= 768) {
+      sidebar.classList.remove('show');
+      _sidebarCollapsed = true;
+    } else {
+      collapseSidebar();
+    }
+  }
+  updateHamburgerIcon();
+}
 
-    const fmtWan = (v) => { if (!v || v <= 0) return '-'; const w = v / 10000; return w >= 10000 ? (w / 10000).toFixed(1) + '億' : Math.round(w) + '萬'; };
-    const fmtUnitPrice = (up) => {
-      if (settings.areaUnit === 'sqm') {
-        if (up <= 0) return '-';
-        return Math.round(up / PING_TO_SQM / 10000) + '萬/m²';
+function collapseSidebar() {
+  const sidebar = document.getElementById('sidebar');
+  sidebar.classList.add('collapsed');
+  sidebar.classList.remove('show');
+  _sidebarCollapsed = true;
+  updateHamburgerIcon();
+}
+
+// ── Filter panel ──
+function toggleFilters() {
+  const dropdown = document.getElementById('filterDropdown');
+  const btn = document.getElementById('filterToggleBtn');
+  const show = !dropdown.classList.contains('show');
+  dropdown.classList.toggle('show', show);
+}
+
+function updateFilterBtnState() {
+  const btn = document.getElementById('filterToggleBtn');
+  if (!btn) return;
+  const hasFilter = ['fBuildType', 'fRooms', 'fPing', 'fRatio', 'fUnitPrice', 'fPrice', 'fYear'].some(id => {
+    const el = document.getElementById(id);
+    return el && el.value.trim() !== '';
+  }) || (document.getElementById('fExcludeSpecial') && document.getElementById('fExcludeSpecial').checked);
+
+  if (hasFilter) {
+    btn.classList.add('active');
+  } else {
+    btn.classList.remove('active');
+  }
+}
+
+function clearFilters() {
+  ['fBuildType', 'fRooms', 'fPing', 'fRatio', 'fUnitPrice', 'fPrice', 'fYear'].forEach(id => {
+    const el = document.getElementById(id); if (el) el.value = '';
+  });
+  const cb = document.getElementById('fExcludeSpecial'); if (cb) cb.checked = false;
+  document.querySelectorAll('.quick-filters button').forEach(b => b.classList.remove('active'));
+  updateFilterBtnState();
+}
+function applyFiltersAndSearch() {
+  updateFilterBtnState();
+  toggleFilters();
+  doSearch();
+}
+function quickFilter(mode) {
+  const nowYear = new Date().getFullYear() - 1911;
+  if (mode === '1yr') {
+    document.getElementById('fYear').value = `${nowYear - 1}-${nowYear}`;
+    document.getElementById('qf1yr').classList.add('active');
+    document.getElementById('qf2yr').classList.remove('active');
+  } else if (mode === '2yr') {
+    document.getElementById('fYear').value = `${nowYear - 2}-${nowYear}`;
+    document.getElementById('qf2yr').classList.add('active');
+    document.getElementById('qf1yr').classList.remove('active');
+  } else if (mode === 'nospecial') {
+    const cb = document.getElementById('fExcludeSpecial');
+    cb.checked = !cb.checked;
+    document.getElementById('qfNoSpec').classList.toggle('active', cb.checked);
+  } else if (mode === 'clear') {
+    clearFilters();
+    updateFilterBtnState();
+    if (txData.length > 0) rerunSearch();
+    return;
+  }
+  updateFilterBtnState();
+  if (txData.length > 0) rerunSearch();
+}
+function getFilterParams() {
+  let p = '';
+  const fields = [
+    ['fBuildType', 'building_type'], ['fRooms', 'rooms'], ['fPing', 'ping'],
+    ['fRatio', 'public_ratio'], ['fUnitPrice', 'unit_price'], ['fPrice', 'price'], ['fYear', 'year']
+  ];
+  fields.forEach(([id, param]) => {
+    const el = document.getElementById(id);
+    if (el && el.value.trim()) p += '&' + param + '=' + encodeURIComponent(el.value.trim());
+  });
+  const exSp = document.getElementById('fExcludeSpecial');
+  if (exSp && exSp.checked) p += '&exclude_special=1';
+  return p;
+}
+
+// ── Sort ──
+function sortData(sortType) {
+  const dir = sortDirection === 'asc' ? 1 : -1;
+  const sorters = {
+    date: (a, b) => dir * (b.date_raw || '').localeCompare(a.date_raw || ''),
+    price: (a, b) => dir * ((b.price || 0) - (a.price || 0)),
+    unit_price: (a, b) => dir * ((b.unit_price_ping || 0) - (a.unit_price_ping || 0)),
+    ping: (a, b) => dir * ((b.area_ping || 0) - (a.area_ping || 0)),
+    public_ratio: (a, b) => dir * ((a.public_ratio || 999) - (b.public_ratio || 999)),
+    community: (a, b) => {
+      const ca = a.community_name || '', cb2 = b.community_name || '';
+      if (ca && !cb2) return -1; if (!ca && cb2) return 1;
+      if (ca !== cb2) return dir * ca.localeCompare(cb2);
+      return dir * (b.date_raw || '').localeCompare(a.date_raw || '');
+    }
+  };
+  if (sorters[sortType]) txData.sort(sorters[sortType]);
+}
+
+function setSort(btn) {
+  const newSort = btn.dataset.sort;
+  if (currentSort === newSort) {
+    sortDirection = sortDirection === 'desc' ? 'asc' : 'desc';
+  } else {
+    currentSort = newSort;
+    sortDirection = 'desc';
+  }
+  document.querySelectorAll('.sort-bar button[data-sort]').forEach(b => {
+    b.classList.remove('active');
+    const oldArrow = b.querySelector('.sort-arrow');
+    if (oldArrow) oldArrow.remove();
+  });
+  btn.classList.add('active');
+  const arrow = document.createElement('span');
+  arrow.className = 'sort-arrow';
+  arrow.textContent = sortDirection === 'desc' ? ' ▼' : ' ▲';
+  btn.appendChild(arrow);
+  if (txData.length > 0) { sortData(currentSort); renderResults(); plotMarkers(false); }
+}
+
+function rerunSearch() {
+  if (lastSearchType === 'area') doAreaSearch();
+  else if (lastSearchType === 'keyword') doSearch();
+}
+
+// ── Autocomplete ──
+let _acTimer = null, _acIdx = -1, _acResults = [], _selectedCommunity = null;
+function handleSearchKeydown(e) {
+  const list = document.getElementById('acList');
+  if (list.classList.contains('show') && _acResults.length > 0) {
+    if (e.key === 'ArrowDown') { e.preventDefault(); _acIdx = Math.min(_acIdx + 1, _acResults.length - 1); renderAcList(); return; }
+    if (e.key === 'ArrowUp') { e.preventDefault(); _acIdx = Math.max(_acIdx - 1, -1); renderAcList(); return; }
+    if (e.key === 'Enter' && _acIdx >= 0) { e.preventDefault(); selectCommunity(_acResults[_acIdx].name); return; }
+  }
+  if (e.key === 'Escape') { hideAcList(); return; }
+  if (e.key === 'Enter') doSearch();
+}
+function onSearchInput() {
+  if (_selectedCommunity) clearSelectedCommunity();
+  const kw = document.getElementById('searchInput').value.trim();
+  if (kw.length < 2) { hideAcList(); return; }
+  clearTimeout(_acTimer);
+  _acTimer = setTimeout(() => fetchAcResults(kw), 250);
+}
+async function fetchAcResults(kw) {
+  try {
+    const resp = await fetch(`${API_BASE}/api/com_match?keyword=${encodeURIComponent(kw)}&top_n=8`);
+    const data = await resp.json();
+    if (data.success && data.results && data.results.length > 0) {
+      _acResults = data.results; _acIdx = -1; positionAcList(); renderAcList();
+      document.getElementById('acList').classList.add('show');
+    } else hideAcList();
+  } catch (e) { hideAcList(); }
+}
+function renderAcList() {
+  const list = document.getElementById('acList');
+  list.innerHTML = _acResults.map((r, i) => {
+    const tagClass = r.match_type === '精確' ? 'exact' : (r.match_type === '包含' ? 'contains' : 'fuzzy');
+    const priceWan = r.avg_price ? Math.round(r.avg_price / 10000) : 0;
+    return `<div class="autocomplete-item${i === _acIdx ? ' selected' : ''}" onclick="selectCommunity('${escAttr(r.name)}')">
+      <span class="ac-name">${escHtml(r.name)}<span class="ac-tag ${tagClass}">${r.match_type}</span></span>
+      <span class="ac-meta">${r.tx_count}筆${priceWan > 0 ? ' · 均' + priceWan + '萬' : ''} · ${escHtml(r.district || '')}</span>
+    </div>`;
+  }).join('');
+}
+function selectCommunity(name) {
+  _selectedCommunity = name;
+  document.getElementById('searchInput').value = name;
+  document.getElementById('selComName').textContent = name;
+  document.getElementById('selectedCommunity').style.display = '';
+  hideAcList(); doSearch();
+}
+function clearSelectedCommunity() {
+  _selectedCommunity = null;
+  document.getElementById('selectedCommunity').style.display = 'none';
+}
+function hideAcList() { document.getElementById('acList').classList.remove('show'); _acResults = []; _acIdx = -1; }
+function positionAcList() {
+  const input = document.getElementById('searchInput'), list = document.getElementById('acList');
+  const rect = input.getBoundingClientRect();
+  list.style.left = rect.left + 'px'; list.style.top = (rect.bottom + 2) + 'px';
+  list.style.width = (rect.right - rect.left + 60) + 'px';
+}
+function stopAllBounce() {
+  _lastBouncingEls.forEach(el => { if (el) el.classList.remove('marker-bounce'); });
+  _lastBouncingEls = [];
+}
+function bounceElement(el) {
+  stopAllBounce();
+  el.classList.remove('marker-bounce'); void el.offsetWidth;
+  el.classList.add('marker-bounce');
+  _lastBouncingEls = [el];
+}
+document.addEventListener('click', e => { if (!e.target.closest('.autocomplete-wrap')) hideAcList(); });
+
+// ── Hover / Select ──
+function hoverTx(idx) {
+  let targetMarker = null;
+  markerClusterGroup.eachLayer(layer => {
+    if (!targetMarker && layer._groupItems && layer._groupItems.some(it => it.origIdx === idx)) targetMarker = layer;
+  });
+  if (!targetMarker) return;
+  const ll = targetMarker.getLatLng();
+  if (!map.getBounds().contains(ll)) {
+    _hoverPanSuppressed = true;
+    map.panTo(ll, { animate: true, duration: 0.25 });
+    setTimeout(() => { _hoverPanSuppressed = false; }, 600);
+  }
+  const tryBounce = () => {
+    const iconEl = targetMarker._icon; if (!iconEl) return;
+    bounceElement(iconEl.firstElementChild || iconEl);
+  };
+  if (targetMarker._icon) tryBounce();
+  else markerClusterGroup.zoomToShowLayer(targetMarker, () => setTimeout(tryBounce, 100));
+}
+function unhoverTx() { stopAllBounce(); hideMarkerTooltip(); }
+function hoverCommunity(name) {
+  stopAllBounce();
+  document.getElementById('map').classList.add('hover-unblur');
+  const matched = [];
+  markerClusterGroup.eachLayer(layer => {
+    if (layer._groupLabel === name || (layer._groupItems && layer._groupItems.some(it => it.tx.community_name === name)))
+      matched.push(layer);
+  });
+  if (matched.length === 0) return;
+  const bounds = map.getBounds();
+  const anyVisible = matched.some(m => m._icon && bounds.contains(m.getLatLng()));
+  if (!anyVisible) {
+    _hoverPanSuppressed = true;
+    map.panTo(matched[0].getLatLng(), { animate: true, duration: 0.3 });
+    setTimeout(() => { _hoverPanSuppressed = false; }, 600);
+  }
+  const first = matched.find(m => m._icon && bounds.contains(m.getLatLng())) || matched[0];
+  const doBounce = () => { if (!first._icon) return; bounceElement(first._icon.firstElementChild || first._icon); };
+  if (first._icon) doBounce(); else setTimeout(doBounce, 350);
+}
+function unhoverCommunity() {
+  stopAllBounce();
+  document.getElementById('map').classList.remove('hover-unblur');
+}
+
+// ── Search ──
+async function doSearch() {
+  const kw = document.getElementById('searchInput').value.trim();
+  if (!kw && !getFilterParams() && !_selectedCommunity) { alert('請輸入搜尋關鍵字或選擇篩選條件'); return; }
+
+  // If there's no keyword and no selected community, but there ARE filters,
+  // delegate to area search instead to prevent backend 400 errors for missing keyword.
+  if (!kw && !_selectedCommunity) {
+    doAreaSearch();
+    return;
+  }
+
+  hideAcList(); lastSearchType = 'keyword';
+  const results = document.getElementById('results');
+  results.innerHTML = '<div class="loading"><div class="skeleton" style="height:60px;margin:16px"></div><div class="skeleton" style="height:60px;margin:16px"></div></div>';
+  const limitVal = document.getElementById('limitSelect').value;
+  let url = `${API_BASE}/api/search?keyword=${encodeURIComponent(kw)}&limit=${limitVal}&location_mode=${getLocationMode()}${getFilterParams()}`;
+  if (_selectedCommunity) url += '&community=' + encodeURIComponent(_selectedCommunity);
+  try {
+    const resp = await fetch(url);
+    const ctype = resp.headers.get('content-type') || '';
+    if (!ctype.includes('application/json')) { results.innerHTML = `<div class="empty">❌ 伺服器回應異常 (HTTP ${resp.status})</div>`; return; }
+    const data = await resp.json();
+    if (!data.success) { results.innerHTML = '<div class="empty">❌ ' + (data.error || '搜尋失敗') + '</div>'; return; }
+    handleSearchResult(data);
+  } catch (e) { results.innerHTML = '<div class="empty">❌ 網路連線異常，請稍後再試<br><span style="font-size:12px">(' + e.message + ')</span></div>'; }
+}
+
+let _areaSearchController = null;
+
+async function doAreaSearch() {
+  if (_areaSearchController) {
+    _areaSearchController.abort();
+  }
+  _areaSearchController = new AbortController();
+
+  const bounds = map.getBounds(); lastSearchType = 'area';
+  const results = document.getElementById('results');
+  results.innerHTML = '<div class="loading"><div class="skeleton" style="height:60px;margin:16px"></div></div>';
+  const limitVal = document.getElementById('limitSelect').value;
+  const url = `${API_BASE}/api/search_area?south=${bounds.getSouth()}&north=${bounds.getNorth()}&west=${bounds.getWest()}&east=${bounds.getEast()}&limit=${limitVal}&location_mode=${getLocationMode()}${getFilterParams()}`;
+  try {
+    const resp = await fetch(url, { signal: _areaSearchController.signal });
+    const ctype = resp.headers.get('content-type') || '';
+    if (!ctype.includes('application/json')) { results.innerHTML = `<div class="empty">❌ 搜此區域失敗 (HTTP ${resp.status})</div>`; return; }
+    const data = await resp.json();
+    if (!data.success) { results.innerHTML = '<div class="empty">❌ ' + (data.error || '搜尋失敗') + '</div>'; return; }
+    if (!data.transactions || data.transactions.length === 0) {
+      results.innerHTML = '<div class="empty">😢 此區域沒有成交紀錄<br><span style="font-size:12px">試試放大地圖或移動到其他區域</span></div>';
+      document.getElementById('summaryBar').style.display = 'none';
+      markerGroup.clearLayers(); return;
+    }
+    handleSearchResult(data, false);
+  } catch (e) {
+    if (e.name === 'AbortError') return;
+    results.innerHTML = '<div class="empty">❌ 網路連線異常，請稍後再試<br><span style="font-size:12px">(' + e.message + ')</span></div>';
+  } finally {
+    if (_areaSearchController && !_areaSearchController.signal.aborted) {
+      _areaSearchController = null;
+    }
+  }
+}
+
+function handleSearchResult(data, fitBounds = true) {
+  txData = data.transactions || [];
+  if (!markerSettings.showLotAddr) txData = txData.filter(tx => !isLotAddress(tx.address_raw || tx.address || ''));
+
+  // If this was a keyword/community search and we have a specific community match
+  // Filter out records from other counties/cities to avoid confusing mixed results (e.g. 帝寶 in Taipei vs elsewhere)
+  if (data.search_type !== 'area' && window._selectedCommunity) {
+    const mainCounty = data.district ? data.district.substring(0, 3) : '';
+    if (mainCounty) {
+       txData = txData.filter(tx => {
+           const txCounty = tx.district ? tx.district.substring(0, 3) : '';
+           return !txCounty || txCounty === mainCounty;
+       });
+    }
+  }
+
+  // Hide other communities when searching for a specific community or address
+  if (data.search_type !== 'area') {
+      const searchedName = data.community_name || window._selectedCommunity || document.getElementById('searchInput').value.trim();
+      if (searchedName) {
+         txData = txData.filter(tx => {
+             const cn = tx.community_name || '';
+             // Keep if it matches the searched name, or if it doesn't have a community name (it might be the address itself)
+             return !cn || cn.includes(searchedName) || searchedName.includes(cn);
+         });
       }
-      return up > 0 ? Math.round(up / 10000) + '萬/坪' : '-';
-    };
-    const fmtArea = (sqm, ping) => {
-      if (settings.areaUnit === 'sqm') {
-        const m2 = sqm > 0 ? sqm : (ping > 0 ? ping * PING_TO_SQM : 0);
-        return m2 > 0 ? m2.toFixed(1) + ' m²' : '-';
-      }
-      return ping > 0 ? ping.toFixed(1) + '坪' : (sqm > 0 ? (sqm / PING_TO_SQM).toFixed(1) + '坪' : '-');
-    };
-    const formatDateStr = (raw) => {
-      if (!raw) return '-';
-      const s = String(raw).trim();
-      if (s.length >= 7) {
-        const rocY = parseInt(s.substring(0, s.length - 4), 10);
-        const mm = s.substring(s.length - 4, s.length - 2);
-        const dd = s.substring(s.length - 2);
-        if (settings.yearFormat === 'ce') return (rocY + 1911) + '/' + mm + '/' + dd;
-        return rocY + '/' + mm + '/' + dd;
-      }
-      return s;
-    };
+  }
 
-    // Add logic to calculate color dot here (can be simplified if map styling takes over entirely, but needed for sidebar)
-    const colorDotStyle = computed(() => {
-        // Mock style to keep the card visually similar, can refine later if needed
-        return { display: 'none' };
+  if (txData.length === 0) {
+    document.getElementById('results').innerHTML = '<div class="empty">😢 沒有找到符合條件的資料</div>';
+    document.getElementById('summaryBar').style.display = 'none';
+    markerGroup.clearLayers(); return;
+  }
+  window._communityName = data.community_name || null;
+  window._searchType = data.search_type || 'address';
+  window._summary = data.summary || {};
+  communitySummaries = data.community_summaries || {};
+  if (data.search_type === 'area') {
+    collapsedCommunities = {};
+    const cNames = [...new Set(txData.map(tx => tx.community_name).filter(Boolean))];
+    cNames.forEach(cn => { collapsedCommunities[cn] = true; });
+  } else { collapsedCommunities = {}; }
+  sortData(currentSort); renderResults(); renderSummary(); plotMarkers(fitBounds);
+  if (window.innerWidth <= 768) document.getElementById('sidebar').classList.remove('show');
+}
+
+// ── Render Results ──
+function renderResults() {
+  const container = document.getElementById('results');
+  const groups = [], communityMap = {}, noComItems = [];
+  txData.forEach((tx, i) => {
+    if (!markerSettings.showLotAddr && isLotAddress(tx.address_raw || tx.address || '')) return;
+    const cn = tx.community_name || '';
+    if (cn) { if (!(cn in communityMap)) { communityMap[cn] = groups.length; groups.push({ name: cn, items: [] }); } groups[communityMap[cn]].items.push({ tx, origIdx: i }); }
+    else noComItems.push({ tx, origIdx: i });
+  });
+  let html = '';
+  if (window._communityName && groups.length <= 1 && window._searchType !== 'area') {
+    html += `<div style="padding:10px 14px;background:var(--green-bg);border-bottom:1px solid var(--border)"><span style="font-weight:800;font-size:14px;color:var(--green)">🏘️ ${escHtml(window._communityName)}</span></div>`;
+  }
+  groups.forEach(group => {
+    const cn = group.name, isCollapsed = collapsedCommunities[cn] === true;
+    const stats = communitySummaries[cn] || computeLocalStats(group.items);
+    html += `<div class="community-group">`;
+    const inlineStats = stats ? [stats.avg_unit_price_ping > 0 ? `均單 ${fmtAvgUnitWan(stats.avg_unit_price_ping)}` : '', stats.avg_ping > 0 ? `均面積 ${fmtAvgArea(stats.avg_ping)}` : '', stats.avg_ratio > 0 ? `公設 ${stats.avg_ratio.toFixed(0)}%` : ''].filter(Boolean) : [];
+    html += `<div class="community-header" onclick="toggleCommunity(this,'${escAttr(cn)}')" onmouseenter="hoverCommunity('${escAttr(cn)}')" onmouseleave="unhoverCommunity()">
+      <span class="ch-arrow ${isCollapsed ? '' : 'open'}">▶</span>
+      <div style="flex:1;min-width:0"><div class="ch-name">${escHtml(cn)}</div>
+      ${inlineStats.length ? `<div class="ch-stats-inline">${inlineStats.map(s => `<span>${s}</span>`).join('')}</div>` : ''}</div>
+      <span class="ch-count">${group.items.length} 筆</span></div>`;
+    if (stats) {
+      html += `<div class="community-stats" id="cstats-${cssId(cn)}" style="${isCollapsed ? 'display:none' : ''}">
+        <div class="cs-item"><span class="cs-label">📊 筆數</span><span class="cs-value">${group.items.length}</span></div>
+        <div class="cs-item"><span class="cs-label">💰 均總</span><span class="cs-value">${fmtWan(stats.avg_price)}</span></div>
+        <div class="cs-item"><span class="cs-label"> 均單</span><span class="cs-value">${fmtAvgUnitWan(stats.avg_unit_price_ping)}</span></div>
+        <div class="cs-item"><span class="cs-label">📐 均面積</span><span class="cs-value">${fmtAvgArea(stats.avg_ping)}</span></div>
+        <div class="cs-item"><span class="cs-label">🏗️ 公設</span><span class="cs-value" style="color:${stats.avg_ratio > 35 ? 'var(--red)' : stats.avg_ratio > 30 ? 'var(--orange)' : 'var(--green)'}">${stats.avg_ratio > 0 ? stats.avg_ratio.toFixed(1) + '%' : '-'}</span></div>
+      </div>`;
+    }
+    html += `<div class="community-items ${isCollapsed ? 'collapsed' : ''}" id="citems-${cssId(cn)}" style="${isCollapsed ? 'max-height:0' : 'max-height:999999px'}">`;
+    group.items.forEach(item => { html += renderTxCard(item.tx, item.origIdx); });
+    html += `</div></div>`;
+  });
+  if (noComItems.length > 0) {
+    if (groups.length > 0) html += `<div style="padding:6px 14px;background:var(--bg2);border-bottom:1px solid var(--border);font-size:12px;color:var(--text2);font-weight:600">其他交易 (${noComItems.length} 筆)</div>`;
+    noComItems.forEach(item => { html += renderTxCard(item.tx, item.origIdx); });
+  }
+  if (!html) html = '<div class="empty">沒有資料</div>';
+  container.innerHTML = html;
+}
+
+function renderTxCard(tx, idx) {
+  const isActive = idx === activeCardIdx;
+  if (!markerSettings.showLotAddr && isLotAddress(tx.address_raw || tx.address || '')) return '';
+  const upWan = (tx.unit_price_ping || 0) / 10000;
+  let priceClass = ''; if (upWan > 100) priceClass = ' price-high'; else if (upWan > 50) priceClass = ' price-mid'; else if (upWan > 0) priceClass = ' price-low';
+
+  const avgPriceW = (tx.price || 0) / 10000, avgUnitW = upWan;
+  let colorDot;
+  if (markerSettings.bubbleMode === 'bivariate') {
+    const bvColor = getBivariateColor(avgUnitW, avgPriceW);
+    colorDot = `<svg class="tx-color-dot" width="18" height="18" viewBox="0 0 18 18"><circle cx="9" cy="9" r="8" fill="${bvColor}" stroke="#fff" stroke-width="1.5"/></svg>`;
+  } else {
+    const dotOuter = getColorForMode(markerSettings.outerMode, avgPriceW, avgUnitW);
+    const dotInner = getColorForMode(markerSettings.innerMode, avgPriceW, avgUnitW);
+    colorDot = `<svg class="tx-color-dot" width="18" height="18" viewBox="0 0 18 18"><circle cx="9" cy="9" r="8" fill="${dotOuter}" stroke="#fff" stroke-width="1.5"/><circle cx="9" cy="9" r="5" fill="${dotInner}"/></svg>`;
+  }
+
+  const cn = tx.community_name || '';
+  const cnTag = cn ? `<span class="tx-community-tag" title="${escAttr(cn)}">${escHtml(cn)}</span>` : '';
+  const cnRow = cnTag ? `<div class="tx-community-row">${cnTag}</div>` : '';
+  const specialBadge = tx.is_special ? '<span class="special-badge">特殊</span>' : '';
+  const parkingTag = tx.has_parking ? `<span class="tx-parking-tag">🚗 含車位${tx.parking_price > 0 ? ' ' + fmtWan(tx.parking_price) : ''}</span>` : '';
+
+  return `<div class="tx-card${isActive ? ' active' : ''}${priceClass}${tx.is_special ? ' special' : ''}" onclick="selectTx(${idx})" onmouseenter="hoverTx(${idx})" onmouseleave="unhoverTx()" data-idx="${idx}">
+    ${colorDot}
+    <div class="tx-price-col"><div class="tx-price">${fmtWan(tx.price)}</div><div class="tx-unit">${fmtUnitPrice(tx.unit_price_ping)}</div></div>
+    <div class="tx-addr" title="${escAttr(tx.address)}">${escHtml(tx.address)}${specialBadge}</div>
+    ${cnRow}
+    <div class="tx-detail-row">
+      <span>📅 ${formatDateStr(tx.date_raw)}</span>
+      <span>📐 ${fmtArea(tx.area_sqm, tx.area_ping)}</span>
+      <span>🏠 ${tx.rooms || 0}房${tx.halls || 0}廳${tx.baths || 0}衛</span>
+      ${tx.floor ? `<span>🏢 ${escHtml(String(tx.floor))}F/${escHtml(String(tx.total_floors))}F</span>` : ''}
+      ${tx.public_ratio > 0 ? `<span class="tag">公設${tx.public_ratio}%</span>` : ''}
+      ${tx.building_type ? `<span class="tag">${escHtml(tx.building_type)}</span>` : ''}
+      ${parkingTag}
+      ${tx.note ? `<span style="color:var(--text3);font-size:10px">📝 ${escHtml(tx.note.length > 30 ? tx.note.substring(0, 30) + '…' : tx.note)}</span>` : ''}
+    </div>
+  </div>`;
+}
+
+function computeLocalStats(items) {
+  if (!items || items.length === 0) return null;
+  let prices = [], ups = [], pings = [], ratios = [];
+  items.forEach(({ tx }) => { if (tx.price > 0) prices.push(tx.price); if (tx.unit_price_ping > 0) ups.push(tx.unit_price_ping); if (tx.area_ping > 0) pings.push(tx.area_ping); if (tx.public_ratio > 0) ratios.push(tx.public_ratio); });
+  const avg = arr => arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : 0;
+  return { count: items.length, avg_price: Math.round(avg(prices)), avg_unit_price_ping: avg(ups), avg_ping: avg(pings), avg_ratio: avg(ratios) };
+}
+
+function toggleCommunity(headerEl, name) {
+  const isNowCollapsed = !collapsedCommunities[name]; collapsedCommunities[name] = isNowCollapsed;
+  const itemsEl = document.getElementById('citems-' + cssId(name));
+  const statsEl = document.getElementById('cstats-' + cssId(name));
+  const arrow = headerEl.querySelector('.ch-arrow');
+  if (itemsEl) { if (isNowCollapsed) { itemsEl.classList.add('collapsed'); itemsEl.style.maxHeight = '0'; } else { itemsEl.classList.remove('collapsed'); itemsEl.style.maxHeight = '999999px'; } }
+  if (statsEl) statsEl.style.display = isNowCollapsed ? 'none' : '';
+  if (arrow) arrow.classList.toggle('open', !isNowCollapsed);
+}
+
+function renderSummary() {
+  const s = window._summary;
+  if (!s || !s.total) { document.getElementById('summaryBar').style.display = 'none'; return; }
+  const bar = document.getElementById('summaryBar'); bar.style.display = 'block';
+  const avgUp = fmtUnitPrice(s.avg_unit_price_ping);
+  const minUp = fmtUnitPrice(s.min_unit_price_ping);
+  const maxUp = fmtUnitPrice(s.max_unit_price_ping);
+  const comCount = Object.keys(communitySummaries).length;
+  const comInfo = comCount > 0 ? ` ｜ <span class="val">${comCount}</span> 個建案` : '';
+  bar.innerHTML = `共 <span class="val">${s.total}</span> 筆${comInfo} ｜ 均價 <span class="val">${fmtWan(s.avg_price)}</span> ｜ 均面積 <span class="val">${fmtAvgArea(s.avg_ping)}</span> ｜ 單價 <span class="val">${avgUp}</span><br>單價區間 <span class="val">${minUp}</span> ~ <span class="val">${maxUp}</span> ｜ 均公設 <span class="val">${s.avg_ratio || '-'}%</span>`;
+}
+
+// ══════════════════════════════════════════════════════════
+// COLOR SYSTEMS
+// ══════════════════════════════════════════════════════════
+
+// ── Dual Ring: green -> yellow -> red HSL ──
+function priceColorGradient(value, lo, hi) {
+  if (value <= 0) return '#aaa';
+  if (value <= lo) return 'hsl(155,55%,38%)';
+  if (value >= hi) return 'hsl(0,65%,48%)';
+  const ratio = (value - lo) / (hi - lo);
+  const hue = 155 - ratio * 155;
+  const sat = 55 + ratio * 10;
+  const light = 38 + ratio * 10;
+  return `hsl(${Math.round(hue)},${Math.round(sat)}%,${Math.round(light)}%)`;
+}
+function getUnitPriceColor(wan) { const t = markerSettings.unitThresholds; return priceColorGradient(wan, t[0], t[2]); }
+function getTotalPriceColor(wan) { const t = markerSettings.totalThresholds; return priceColorGradient(wan, t[0], t[2]); }
+function getColorForMode(mode, avgPriceWan, avgUnitWan) {
+  if (mode === 'total_price') return getTotalPriceColor(avgPriceWan);
+  return getUnitPriceColor(avgUnitWan);
+}
+
+// ── Bivariate Color Map (4x4 matrix) ──
+// X-axis: unit_price (cyan), Y-axis: total_price (magenta)
+function getBivariateQuartile(value, thresholds) {
+  if (value <= thresholds[0]) return 0;
+  if (value <= thresholds[1]) return 1;
+  if (value <= thresholds[2]) return 2;
+  return 3;
+}
+
+// Generate bivariate color from cyan (x) and magenta (y) mix
+// Low cyan = light, High cyan = deep cyan
+// Low magenta = light, High magenta = deep magenta
+const BIVARIATE_MATRIX = [
+  // y=0(low total)  y=1            y=2            y=3(high total)
+  ['#e8f4f8', '#d4b9d5', '#c085be', '#8b3a8b'],  // x=0 (low unit)
+  ['#b1dce5', '#a8a6c8', '#9e72b0', '#7a2d7a'],  // x=1
+  ['#6bc5d2', '#7a8dba', '#8555a2', '#6a206a'],  // x=2
+  ['#1fa5b5', '#4f6dac', '#5e3794', '#5a135a'],  // x=3 (high unit)
+];
+
+function getBivariateColor(unitPriceWan, totalPriceWan) {
+  const q = markerSettings.bivUnitQ || [25, 40, 60];
+  const tq = markerSettings.bivTotalQ || [800, 1500, 2500];
+  const xi = getBivariateQuartile(unitPriceWan, q);
+  const yi = getBivariateQuartile(totalPriceWan, tq);
+  return BIVARIATE_MATRIX[xi][yi];
+}
+
+// ══════════════════════════════════════════════════════════
+// MAP & MARKERS
+// ══════════════════════════════════════════════════════════
+
+function initMap() {
+  map = L.map('map', { zoomControl: false }).setView([23.6978, 120.9605], 8);
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager_labels_under/{z}/{x}/{y}{r}.png', {
+    maxZoom: 20, attribution: '&copy; OpenStreetMap & CartoDB'
+  }).addTo(map);
+
+  const iconCreateFn = function (cluster) {
+    const markers = cluster.getAllChildMarkers();
+    let totalPrice = 0, validP = 0, totalUnit = 0, validU = 0, totalCount = 0;
+    markers.forEach(m => {
+      const gc = m._groupCount || 1; totalCount += gc;
+      if (m._avgPrice > 0) { totalPrice += m._avgPrice * gc; validP += gc; }
+      if (m._avgUnitPrice > 0) { totalUnit += m._avgUnitPrice * gc; validU += gc; }
     });
+    const avgPriceWan = validP > 0 ? (totalPrice / validP / 10000) : 0;
+    const avgUnitWan = validU > 0 ? (totalUnit / validU / 10000) : 0;
 
-    return { fmtWan, fmtUnitPrice, fmtArea, formatDateStr, colorDotStyle };
-  },
-  template: `
-    <div class="tx-card" :class="{ active: isActive, special: tx.is_special }" @click="$emit('click')" @mouseenter="$emit('mouseenter')" @mouseleave="$emit('mouseleave')">
-      <!-- color dot omitted for brevity, but map provides colors -->
-      <div class="tx-price-col">
-        <div class="tx-price">{{ fmtWan(tx.price) }}</div>
-        <div class="tx-unit">{{ fmtUnitPrice(tx.unit_price_ping) }}</div>
+    let sz = 44;
+    if (totalCount >= 100) sz = 60; else if (totalCount >= 30) sz = 54; else if (totalCount >= 10) sz = 48;
+    let priceText = '';
+    if (avgPriceWan >= 10000) priceText = (avgPriceWan / 10000).toFixed(1) + '億';
+    else if (avgPriceWan >= 1) priceText = avgPriceWan.toFixed(0) + '萬';
+
+    const line1 = priceText || totalCount + '筆';
+    const line2 = priceText ? totalCount + '筆' : '';
+    let svgHtml;
+
+    if (markerSettings.bubbleMode === 'bivariate') {
+      const bvColor = getBivariateColor(avgUnitWan, avgPriceWan);
+      svgHtml = makeBivariateSVG({ sz, color: bvColor, line1, line2 });
+    } else {
+      const outerColor = getColorForMode(markerSettings.outerMode, avgPriceWan, avgUnitWan);
+      const innerColor = getColorForMode(markerSettings.innerMode, avgPriceWan, avgUnitWan);
+      svgHtml = makeDualRingSVG({ sz, outerColor, innerColor, line1, line2 });
+    }
+
+    const labels = markers.map(m => m._groupLabel).filter(Boolean);
+    const uniqueLabels = [...new Set(labels)];
+    const commLabel = uniqueLabels.length === 1 ? uniqueLabels[0].substring(0, 6) : (uniqueLabels.length > 1 ? uniqueLabels.length + ' 個建案' : '');
+    const labelHtml = commLabel ? `<div style="margin-top:-2px;padding:1px 4px;background:rgba(255,255,255,.95);border-radius:5px;font-size:8px;font-weight:600;color:#333;white-space:nowrap;max-width:70px;overflow:hidden;text-overflow:ellipsis;box-shadow:0 1px 3px rgba(0,0,0,.1);border:1px solid rgba(0,0,0,.06)">${commLabel}</div>` : '';
+    const totalH = commLabel ? sz + 14 : sz;
+    return L.divIcon({
+      html: `<div style="display:flex;flex-direction:column;align-items:center">${svgHtml}${labelHtml}</div>`,
+      className: 'price-marker custom-cluster-icon',
+      iconSize: [sz + 8, totalH], iconAnchor: [(sz + 8) / 2, totalH / 2]
+    });
+  };
+
+  markerClusterGroup = L.markerClusterGroup({
+    spiderfyOnMaxZoom: true, showCoverageOnHover: false, zoomToBoundsOnClick: false,
+    maxClusterRadius: 40, spiderfyDistanceMultiplier: 2.5, iconCreateFunction: iconCreateFn
+  });
+  markerClusterGroup.on('clusterclick', a => a.layer.spiderfy());
+  markerClusterGroup.on('spiderfied', e => {
+    e.cluster._icon.classList.add('spider-focus');
+    e.markers.forEach(m => { if (m._icon) m._icon.classList.add('spider-focus'); });
+    document.getElementById('map').classList.add('spiderfied-active');
+  });
+  markerClusterGroup.on('unspiderfied', e => {
+    if (e.cluster._icon) e.cluster._icon.classList.remove('spider-focus');
+    e.markers.forEach(m => { if (m._icon) m._icon.classList.remove('spider-focus'); });
+    document.getElementById('map').classList.remove('spiderfied-active');
+  });
+  map.addLayer(markerClusterGroup);
+  markerGroup = L.featureGroup().addTo(map);
+  map.on('moveend', onMapMoveEnd);
+  map.on('zoomend', () => {
+    if (markerSettings.displayLogic !== 'all' && txData.length > 0) {
+      clearTimeout(window._replotTimer);
+      window._replotTimer = setTimeout(() => { plotMarkers(false); }, 100);
+    }
+  });
+  addLegend();
+}
+
+function makeDualRingSVG({ sz, outerColor, innerColor, line1, line2 }) {
+  const cx = sz / 2, cy = sz / 2, outerR = sz / 2 - 1, ringW = Math.max(4, Math.floor(sz * 0.1)), innerR = outerR - ringW - 1.5;
+  const hasTwo = line1 && line2, y1 = hasTwo ? cy - 4 : cy, y2 = cy + 7;
+  const fs1 = sz >= 54 ? 11 : 10, fs2 = sz >= 54 ? 9 : 8;
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${sz}" height="${sz}">
+    <circle cx="${cx}" cy="${cy}" r="${outerR}" fill="${outerColor}" stroke="rgba(255,255,255,.9)" stroke-width="2"/>
+    <circle cx="${cx}" cy="${cy}" r="${innerR}" fill="${innerColor}" stroke="rgba(255,255,255,.5)" stroke-width="1.5"/>
+    ${line1 ? `<text x="${cx}" y="${y1}" text-anchor="middle" dominant-baseline="central" fill="#fff" font-size="${fs1}" font-weight="700" font-family="Arial,sans-serif" style="paint-order:stroke" stroke="rgba(0,0,0,.25)" stroke-width=".8">${line1}</text>` : ''}
+    ${line2 ? `<text x="${cx}" y="${y2}" text-anchor="middle" dominant-baseline="central" fill="rgba(255,255,255,.95)" font-size="${fs2}" font-weight="600" font-family="Arial,sans-serif" style="paint-order:stroke" stroke="rgba(0,0,0,.2)" stroke-width=".6">${line2}</text>` : ''}
+  </svg>`;
+}
+
+function makeBivariateSVG({ sz, color, line1, line2 }) {
+  const cx = sz / 2, cy = sz / 2, r = sz / 2 - 1;
+  const hasTwo = line1 && line2, y1 = hasTwo ? cy - 4 : cy, y2 = cy + 7;
+  const fs1 = sz >= 54 ? 11 : 10, fs2 = sz >= 54 ? 9 : 8;
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${sz}" height="${sz}">
+    <circle cx="${cx}" cy="${cy}" r="${r}" fill="${color}" stroke="rgba(255,255,255,.9)" stroke-width="2"/>
+    ${line1 ? `<text x="${cx}" y="${y1}" text-anchor="middle" dominant-baseline="central" fill="#fff" font-size="${fs1}" font-weight="700" font-family="Arial,sans-serif" style="paint-order:stroke" stroke="rgba(0,0,0,.3)" stroke-width="1">${line1}</text>` : ''}
+    ${line2 ? `<text x="${cx}" y="${y2}" text-anchor="middle" dominant-baseline="central" fill="rgba(255,255,255,.9)" font-size="${fs2}" font-weight="600" font-family="Arial,sans-serif" style="paint-order:stroke" stroke="rgba(0,0,0,.2)" stroke-width=".6">${line2}</text>` : ''}
+  </svg>`;
+}
+
+function baseAddress(addr) { if (!addr) return ''; return addr.replace(/\d+樓.*$/, '').replace(/\d+F.*$/i, '').replace(/地下.*$/, ''); }
+function extractDistrict(tx) { return tx.district || ''; }
+
+function buildGroups() {
+  const raw = {};
+  txData.forEach((tx, idx) => {
+    if (!tx.lat || !tx.lng) return;
+    if (!markerSettings.showLotAddr && isLotAddress(tx.address_raw || tx.address || '')) return;
+    let key;
+    if (tx.community_name) {
+      key = 'c:' + tx.community_name + '@' + extractDistrict(tx);
+    } else {
+      key = 'a:' + baseAddress(tx.address_raw || tx.address);
+    }
+    if (!raw[key]) raw[key] = { label: tx.community_name || baseAddress(tx.address).replace(/^(?:(?:台|臺)(?:北|中|南|東)市|(?:新北|桃園|高雄|基隆|新竹|嘉義)[市縣]|.{2,3}縣)/, '').replace(/^[\u4e00-\u9fff]{1,4}[區鄉鎮市]/, ''), communityName: tx.community_name || '', items: [], lats: [], lngs: [], prices: [], unitPrices: [] };
+    const g = raw[key]; g.items.push({ tx, origIdx: idx }); g.lats.push(tx.lat); g.lngs.push(tx.lng);
+    if (tx.price > 0) g.prices.push(tx.price); if (tx.unit_price_ping > 0) g.unitPrices.push(tx.unit_price_ping);
+  });
+  const arr = Object.values(raw);
+  arr.forEach(g => { const sLat = g.lats.slice().sort((a, b) => a - b), sLng = g.lngs.slice().sort((a, b) => a - b), m = Math.floor(sLat.length / 2); g._cLat = sLat[m]; g._cLng = sLng[m]; });
+  const nowYear = new Date().getFullYear() - 1911, twoYearThreshold = (nowYear - 2) * 10000;
+  arr.forEach(g => {
+    const recent = g.items.filter(({ tx }) => { if (tx.is_special) return false; const dr = parseInt(String(tx.date_raw || '0').replace(/\D/g, ''), 10); return dr >= twoYearThreshold; });
+    const rPrices = recent.map(({ tx }) => tx.price).filter(v => v > 0), rUnits = recent.map(({ tx }) => tx.unit_price_ping).filter(v => v > 0);
+    g.recentCount = recent.length; g.recentAvgPrice = rPrices.length ? rPrices.reduce((a, b) => a + b, 0) / rPrices.length : 0; g.recentAvgUnitPrice = rUnits.length ? rUnits.reduce((a, b) => a + b, 0) / rUnits.length : 0;
+  });
+  return arr;
+}
+
+function getMinPriceThreshold(zoom) {
+  if (zoom <= 14) return (markerSettings.autoThresh14 || 8000) * 10000;
+  if (zoom === 15) return (markerSettings.autoThresh15 || 5000) * 10000;
+  if (zoom === 16) return (markerSettings.autoThresh16 || 2000) * 10000;
+  return (markerSettings.autoThresh17 || 0) * 10000;
+}
+
+function plotMarkers(fitBounds = true) {
+  markerClusterGroup.clearLayers();
+  const boundsArr = [], groups = buildGroups();
+  const currentZoom = map ? map.getZoom() : 16;
+  const minPrice = (markerSettings.displayLogic !== 'all') ? getMinPriceThreshold(currentZoom) : 0;
+
+  groups.forEach(g => {
+    const n = g.items.length; if (n === 0) return;
+    const sortedLats = g.lats.slice().sort((a, b) => a - b), sortedLngs = g.lngs.slice().sort((a, b) => a - b), mid = Math.floor(sortedLats.length / 2);
+    const lat = sortedLats[mid], lng = sortedLngs[mid];
+    if (lat == null || lng == null || isNaN(lat) || isNaN(lng)) return;
+    const useRecent = markerSettings.contentMode === 'recent2yr' && g.recentCount > 0;
+    const avgPrice = useRecent ? g.recentAvgPrice : (g.prices.length ? g.prices.reduce((a, b) => a + b, 0) / g.prices.length : 0);
+    if (minPrice > 0 && avgPrice < minPrice) return;
+    const avgUnitPrice = useRecent ? g.recentAvgUnitPrice : (g.unitPrices.length ? g.unitPrices.reduce((a, b) => a + b, 0) / g.unitPrices.length : 0);
+    const avgPriceWan = avgPrice / 10000, avgUnitWan = avgUnitPrice / 10000;
+    const label = g.label ? g.label.substring(0, 8) : '';
+    let priceText = '';
+    if (avgPriceWan >= 10000) priceText = (avgPriceWan / 10000).toFixed(1) + '億';
+    else if (avgPriceWan >= 1) priceText = Math.round(avgPriceWan) + '萬'; else priceText = '-';
+    let sz = n >= 20 ? 56 : (n >= 5 ? 50 : 44); if (n === 1) sz = 42;
+    let line1 = priceText, line2 = n === 1 ? '' : n + '筆';
+
+    let svgHtml;
+    if (markerSettings.bubbleMode === 'bivariate') {
+      svgHtml = makeBivariateSVG({ sz, color: getBivariateColor(avgUnitWan, avgPriceWan), line1, line2 });
+    } else {
+      const outerColor = getColorForMode(markerSettings.outerMode, avgPriceWan, avgUnitWan);
+      const innerColor = getColorForMode(markerSettings.innerMode, avgPriceWan, avgUnitWan);
+      svgHtml = makeDualRingSVG({ sz, outerColor, innerColor, line1, line2 });
+    }
+
+    const labelHtml = label ? `<div style="margin-top:-2px;padding:1px 5px;background:rgba(255,255,255,.95);border-radius:5px;font-size:${n > 1 ? 9 : 8}px;font-weight:700;color:#333;white-space:nowrap;max-width:80px;overflow:hidden;text-overflow:ellipsis;box-shadow:0 1px 3px rgba(0,0,0,.1);border:1px solid rgba(0,0,0,.06)">${escHtml(label)}</div>` : '';
+    const totalH = label ? sz + 15 : sz;
+    const icon = L.divIcon({ html: `<div style="display:flex;flex-direction:column;align-items:center">${svgHtml}${labelHtml}</div>`, iconSize: [sz + 8, totalH], iconAnchor: [(sz + 8) / 2, totalH / 2], className: 'price-marker' });
+    const marker = L.marker([lat, lng], { icon });
+    marker._groupCount = n; marker._avgPrice = avgPrice; marker._avgUnitPrice = avgUnitPrice; marker._groupLabel = g.label; marker._groupItems = g.items;
+    marker.on('mouseover', () => onMarkerHover(marker, g));
+    marker.on('mouseout', () => onMarkerUnhover());
+    marker.on('click', () => showClusterList(g.items));
+    markerClusterGroup.addLayer(marker);
+    boundsArr.push([lat, lng]);
+  });
+  if (fitBounds && boundsArr.length > 0) map.fitBounds(boundsArr, { padding: [40, 40], maxZoom: 18 });
+}
+
+function selectTx(idx) {
+  activeCardIdx = idx;
+  document.querySelectorAll('.tx-card').forEach(card => {
+    if (parseInt(card.dataset.idx, 10) === idx) {
+      card.classList.add('active');
+    } else {
+      card.classList.remove('active');
+    }
+  });
+  const tx = txData[idx];
+  if (tx && tx.lat && tx.lng) {
+    _hoverPanSuppressed = true;
+    map.setView([tx.lat, tx.lng], 17);
+    setTimeout(() => { _hoverPanSuppressed = false; }, 800);
+  }
+}
+
+// ── Marker tooltip ──
+let _markerTooltipEl = null;
+function onMarkerHover(marker, group) {
+  if (marker._icon) bounceElement(marker._icon.firstElementChild || marker._icon);
+  const cn = group.communityName || group.label || '';
+  if (cn) {
+    const allHeaders = document.querySelectorAll('.community-header');
+    for (const h of allHeaders) {
+      const nameEl = h.querySelector('.ch-name');
+      if (nameEl && nameEl.textContent.trim() === cn) { h.scrollIntoView({ behavior: 'smooth', block: 'center' }); h.classList.add('hover-highlight'); break; }
+    }
+  } else if (group.items.length > 0) {
+    const card = document.querySelector(`.tx-card[data-idx="${group.items[0].origIdx}"]`);
+    if (card) card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }
+  showMarkerTooltip(marker, group);
+}
+function onMarkerUnhover() {
+  stopAllBounce(); hideMarkerTooltip();
+  document.querySelectorAll('.community-header.hover-highlight').forEach(h => h.classList.remove('hover-highlight'));
+}
+function formatDateStr(raw) {
+  if (!raw) return '-';
+  const s = String(raw).trim();
+  if (s.length >= 7) {
+    const rocY = parseInt(s.substring(0, s.length - 4), 10);
+    const mm = s.substring(s.length - 4, s.length - 2);
+    const dd = s.substring(s.length - 2);
+    if (markerSettings.yearFormat === 'ce') return (rocY + 1911) + '/' + mm + '/' + dd;
+    return rocY + '/' + mm + '/' + dd;
+  }
+  return s;
+}
+function fmtBuildDate(raw) {
+  if (!raw) return '-';
+  const s = String(raw).trim();
+  if (s.length >= 5) { const y = markerSettings.yearFormat === 'ce' ? parseInt(s.substring(0, 3), 10) + 1911 : parseInt(s.substring(0, 3), 10); return y + '/' + s.substring(3, 5); }
+  return s || '-';
+}
+function showMarkerTooltip(marker, group) {
+  hideMarkerTooltip(); if (!marker._icon) return;
+  const items = group.items || []; if (items.length === 0) return;
+  const label = group.communityName || group.label || '';
+  const years = items.map(({ tx }) => tx.date_raw ? formatDateStr(tx.date_raw).split('/')[0] : '').filter(Boolean);
+  const uniqueYears = [...new Set(years)].sort();
+  const yearRange = uniqueYears.length > 0 ? (uniqueYears.length <= 2 ? uniqueYears.join('-') : uniqueYears[0] + '-' + uniqueYears[uniqueYears.length - 1]) : '-';
+  const floors = items.map(({ tx }) => tx.total_floors).filter(v => v > 0);
+  const maxFloor = floors.length > 0 ? Math.max(...floors) : 0;
+  const types = [...new Set(items.map(({ tx }) => tx.building_type).filter(Boolean))];
+  const typeText = types.length > 0 ? types.slice(0, 2).join('/') : '-';
+  const pings = items.map(({ tx }) => tx.area_ping).filter(v => v > 0);
+  const avgPing = pings.length > 0 ? (pings.reduce((a, b) => a + b, 0) / pings.length).toFixed(0) : '-';
+  const completionDates = [...new Set(items.map(({ tx }) => tx.completion_date).filter(Boolean))];
+  const buildDateText = completionDates.length > 0 ? fmtBuildDate(completionDates[0]) : '-';
+  const materials = [...new Set(items.map(({ tx }) => tx.main_material).filter(Boolean))];
+  const materialText = materials.length > 0 ? materials.slice(0, 2).join('/') : '-';
+
+  const tip = document.createElement('div');
+  tip.className = 'marker-tooltip-info';
+  tip.innerHTML = `${label ? `<div class="mti-name">${escHtml(label)}</div>` : ''}
+    <div class="mti-row"><span>📅</span> ${yearRange}年 ｜ 完工 ${buildDateText}</div>
+    ${maxFloor > 0 ? `<div class="mti-row"><span>🏢</span> ${maxFloor}樓 ｜ ${escHtml(typeText)} ${escHtml(materialText)}</div>` : `<div class="mti-row"><span>🏠</span> ${escHtml(typeText)} ${escHtml(materialText)}</div>`}
+    <div class="mti-row"><span>📐</span> 均${fmtAvgArea(parseFloat(avgPing))}</div>`;
+  const iconRect = marker._icon.getBoundingClientRect();
+  tip.style.position = 'fixed'; tip.style.left = (iconRect.left + iconRect.width / 2) + 'px';
+  tip.style.top = (iconRect.top - 8) + 'px'; tip.style.zIndex = '2000';
+  document.body.appendChild(tip);
+  _markerTooltipEl = tip;
+}
+function hideMarkerTooltip() { if (_markerTooltipEl) { _markerTooltipEl.remove(); _markerTooltipEl = null; } }
+
+// ── Legend ──
+let _legendControl = null, _legendDiv = null;
+function updateLegend() {
+  if (!_legendDiv) return;
+  let legendContent = '';
+  if (markerSettings.bubbleMode === 'bivariate') {
+    // Bivariate legend: mini 4x4 matrix
+    const q = markerSettings.bivUnitQ, tq = markerSettings.bivTotalQ;
+    let matrixHtml = '<div style="display:grid;grid-template-columns:repeat(4,24px);gap:3px;margin:6px 0">';
+    for (let yi = 3; yi >= 0; yi--) {
+      for (let xi = 0; xi < 4; xi++) {
+        matrixHtml += `<div style="width:24px;height:24px;border-radius:4px;background:${BIVARIATE_MATRIX[xi][yi]}"></div>`;
+      }
+    }
+    matrixHtml += '</div>';
+    const unitLabel = markerSettings.areaUnit === 'sqm' ? '萬/m²' : '萬/坪';
+    const unitShort = markerSettings.areaUnit === 'sqm' ? '單價/m²' : '單價/坪';
+    legendContent = `<div style="font-weight:800;margin-bottom:8px;font-size:12px;color:var(--primary-dark)">🎨 雙變數色彩映射</div>
+      <div style="font-size:10px;color:var(--text2);line-height:1.6;margin-bottom:6px">
+        <span style="display:inline-block;width:8px;height:8px;background:#6bc5d2;border-radius:1px;margin-right:4px"></span>水平：${unitShort}越高越青<br>
+        <span style="display:inline-block;width:8px;height:8px;background:#c085be;border-radius:1px;margin-right:4px"></span>垂直：總價越高越洋紅
       </div>
-      <div class="tx-addr" :title="tx.address">{{ tx.address }} <span v-if="tx.is_special" class="special-badge">特殊</span></div>
-      <div class="tx-community-row" v-if="tx.community_name">
-        <span class="tx-community-tag" :title="tx.community_name">{{ tx.community_name }}</span>
+      <div style="display:flex;justify-content:center;margin-bottom:6px">
+        ${matrixHtml}
       </div>
-      <div class="tx-detail-row">
-        <span>📅 {{ formatDateStr(tx.date_raw) }}</span>
-        <span>📐 {{ fmtArea(tx.area_sqm, tx.area_ping) }}</span>
-        <span>🏠 {{ tx.rooms || 0 }}房{{ tx.halls || 0 }}廳{{ tx.baths || 0 }}衛</span>
-        <span v-if="tx.floor">🏢 {{ tx.floor }}F/{{ tx.total_floors }}F</span>
-        <span v-if="tx.public_ratio > 0" class="tag">公設{{ tx.public_ratio }}%</span>
-        <span v-if="tx.building_type" class="tag">{{ tx.building_type }}</span>
-        <span v-if="tx.has_parking" class="tx-parking-tag">🚗 含車位{{ tx.parking_price > 0 ? ' ' + fmtWan(tx.parking_price) : '' }}</span>
-        <span v-if="tx.note" style="color:var(--text3);font-size:10px">📝 {{ tx.note.length > 30 ? tx.note.substring(0, 30) + '…' : tx.note }}</span>
+      <div style="font-size:9px;color:var(--text3);line-height:1.4">
+        單價: ≤${q[0]}|${q[0]}-${q[1]}|${q[1]}-${q[2]}|>${q[2]}<br>
+        總價: ≤${tq[0]}|${tq[0]}-${tq[1]}|${tq[1]}-${tq[2]}|>${tq[2]}
+      </div>`;
+  } else {
+    const unitShort = markerSettings.areaUnit === 'sqm' ? '單價/m²' : '單價/坪';
+    const unitLabel = markerSettings.areaUnit === 'sqm' ? '萬/m²' : '萬/坪';
+    legendContent = `<div style="font-weight:800;margin-bottom:8px;font-size:12px;color:var(--primary-dark)">🎯 雙圈色彩定義</div>
+      <div style="font-weight:600;font-size:10px;color:var(--text);margin-bottom:6px;background:var(--bg2);padding:2px 6px;border-radius:4px;display:inline-block">外環＝${markerSettings.outerMode === 'unit_price' ? unitShort : '總價'} ｜ 內圈＝${markerSettings.innerMode === 'unit_price' ? unitShort : '總價'}</div>
+      <div style="display:flex;flex-direction:column;gap:4px;font-size:10px">
+        <div style="display:flex;align-items:center;gap:6px"><div style="width:12px;height:12px;border-radius:50%;background:linear-gradient(135deg,hsl(155,55%,38%),hsl(60,60%,42%))"></div><span>低→中 (綠→黃)</span></div>
+        <div style="display:flex;align-items:center;gap:6px"><div style="width:12px;height:12px;border-radius:50%;background:linear-gradient(135deg,hsl(60,60%,42%),hsl(0,65%,48%))"></div><span>中→高 (黃→紅)</span></div>
+      </div>
+      <div style="font-size:9px;color:var(--text3);margin-top:6px;border-top:1px dashed var(--border);padding-top:4px;line-height:1.4">
+        單價: ${markerSettings.unitThresholds[0]}~${markerSettings.unitThresholds[2]}${unitLabel}<br>總價: ${markerSettings.totalThresholds[0]}~${markerSettings.totalThresholds[2]}萬
+      </div>`;
+  }
+
+  _legendDiv.innerHTML = `<div style="background:var(--glass);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);padding:12px;border-radius:var(--radius-lg);box-shadow:var(--shadow-md);font-size:11px;min-width:150px;max-width:55vw;pointer-events:none;border:1px solid var(--glass-border)">
+    ${legendContent}
+    <div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border);display:flex;justify-content:flex-start;align-items:center;pointer-events:auto;">
+      <div class="area-toggle-wrap">
+        <label class="area-toggle"><input type="checkbox" id="areaToggle" ${areaAutoSearch ? 'checked' : ''} onchange="toggleAreaAutoSearch(this.checked)"><span class="area-toggle-slider"></span></label>
+        <span class="area-toggle-label">自動顯示建案</span>
       </div>
     </div>
-  `
+  </div>`;
+}
+function addLegend() {
+  if (_legendControl) return;
+  _legendControl = L.control({ position: 'bottomleft' });
+  _legendControl.onAdd = function () {
+    _legendDiv = L.DomUtil.create('div', 'custom-legend-wrap');
+    updateLegend();
+    L.DomEvent.disableScrollPropagation(_legendDiv);
+    L.DomEvent.disableClickPropagation(_legendDiv);
+    return _legendDiv;
+  };
+  _legendControl.addTo(map);
+}
+
+// ── Location ──
+let compassListenerAdded = false;
+
+function startCompass() {
+  if (compassListenerAdded) return;
+
+  const handleOrientation = (e) => {
+    let heading = null;
+    if (e.webkitCompassHeading !== undefined) {
+      heading = e.webkitCompassHeading;
+    } else if (e.alpha !== null) {
+      heading = 360 - e.alpha;
+    }
+
+    if (heading !== null && locationMarker && locationMarker._icon) {
+      const headingEl = locationMarker._icon.querySelector('.locate-heading');
+      if (headingEl) {
+        headingEl.style.display = 'block';
+        headingEl.style.transform = `rotate(${heading}deg)`;
+      }
+    }
+  };
+
+  if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
+    DeviceOrientationEvent.requestPermission()
+      .then(permissionState => {
+        if (permissionState === 'granted') {
+          window.addEventListener('deviceorientation', handleOrientation, true);
+          compassListenerAdded = true;
+        }
+      })
+      .catch(console.error);
+  } else {
+    window.addEventListener('deviceorientationabsolute', handleOrientation, true);
+    window.addEventListener('deviceorientation', handleOrientation, true);
+    compassListenerAdded = true;
+  }
+}
+
+function locateMe() {
+  if (!navigator.geolocation) { alert('您的瀏覽器不支援定位功能'); return; }
+
+  // Start compass synchronously to satisfy iOS Safari requirements for DeviceOrientationEvent.requestPermission()
+  startCompass();
+
+  navigator.geolocation.getCurrentPosition(pos => {
+    const { latitude: lat, longitude: lng, accuracy } = pos.coords;
+    map.setView([lat, lng], 16);
+    if (locationMarker) map.removeLayer(locationMarker);
+    if (locationCircle) map.removeLayer(locationCircle);
+
+    locationCircle = L.circle([lat, lng], { radius: accuracy, color: 'var(--primary)', fillColor: 'var(--primary)', fillOpacity: .1, weight: 1 }).addTo(map);
+
+    const iconHtml = `<div class="locate-marker-wrap"><div class="locate-heading"></div><div class="locate-pulse"></div></div>`;
+    locationMarker = L.marker([lat, lng], { icon: L.divIcon({ html: iconHtml, iconSize: [48, 48], className: '' }), zIndexOffset: 1000 }).addTo(map).bindPopup(`📍 您的位置<br><span style="font-size:11px;color:var(--text2)">精確度: ±${Math.round(accuracy)}m</span>`).openPopup();
+
+    setTimeout(() => { if (locationCircle) { map.removeLayer(locationCircle); locationCircle = null; } }, 5000);
+  }, err => { alert('定位失敗: ' + err.message); }, { enableHighAccuracy: true, timeout: 10000 });
+}
+
+function showClusterList(items) {
+  const container = document.getElementById('results');
+  const comGroups = {}; items.forEach(it => { const cn = it.tx.community_name || '未知建案'; if (!comGroups[cn]) comGroups[cn] = []; comGroups[cn].push(it); });
+  const comList = Object.entries(comGroups).sort((a, b) => b[1].length - a[1].length);
+  let html = `<div class="cluster-list-header"><span>📍 此位置 ${items.length} 筆重疊資料</span><button onclick="renderResults()">↩ 返回全列表</button></div>`;
+  comList.forEach(([cn, comItems]) => {
+    html += `<div style="padding:6px 12px;background:#fff;border-bottom:1px solid var(--border);font-weight:600;font-size:13px;color:var(--text)">🏘️ ${escHtml(cn)}（${comItems.length}筆）</div>`;
+    comItems.forEach(({ tx, origIdx }) => { html += renderTxCard(tx, origIdx); });
+  });
+  container.innerHTML = html;
+  if (window.innerWidth <= 768) document.getElementById('sidebar').classList.add('show');
+}
+
+// ── Settings ──
+function toggleSettings() {
+  document.getElementById('settingsPanel').classList.toggle('show');
+  document.getElementById('settingsOverlay').classList.toggle('show');
+}
+function onBubbleModeChange() {
+  markerSettings.bubbleMode = document.getElementById('sBubbleMode').value;
+  document.getElementById('dualRingSettings').style.display = markerSettings.bubbleMode === 'dual_ring' ? '' : 'none';
+  document.getElementById('bivariateSettings').style.display = markerSettings.bubbleMode === 'bivariate' ? '' : 'none';
+  if (markerSettings.bubbleMode === 'bivariate') renderBivariatePreview();
+  applySettings();
+}
+function renderBivariatePreview() {
+  const container = document.getElementById('bivMatrixPreview');
+  if (!container) return;
+  let html = '';
+  for (let yi = 3; yi >= 0; yi--) {
+    for (let xi = 0; xi < 4; xi++) {
+      html += `<div class="biv-cell" style="background:${BIVARIATE_MATRIX[xi][yi]}"></div>`;
+    }
+  }
+  container.innerHTML = html;
+}
+function updateThresh() {
+  let um1 = parseInt(document.getElementById('unitMin').value, 10);
+  let um2 = parseInt(document.getElementById('unitMax').value, 10);
+  if (um1 >= um2) { um1 = Math.max(0, um2 - 5); document.getElementById('unitMin').value = um1; }
+  document.getElementById('vUnitMin').textContent = um1;
+  document.getElementById('vUnitMax').textContent = um2;
+  let tm1 = parseInt(document.getElementById('totalMin').value, 10);
+  let tm2 = parseInt(document.getElementById('totalMax').value, 10);
+  if (tm1 >= tm2) { tm1 = Math.max(0, tm2 - 100); document.getElementById('totalMin').value = tm1; }
+  document.getElementById('vTotalMin').textContent = tm1;
+  document.getElementById('vTotalMax').textContent = tm2;
+  markerSettings.unitThresholds = [um1, (um1 + um2) / 2, um2];
+  markerSettings.totalThresholds = [tm1, (tm1 + tm2) / 2, tm2];
+  updateLegend();
+  if (txData.length > 0) {
+    clearTimeout(window._replotTimer);
+    window._replotTimer = setTimeout(() => { plotMarkers(false); }, 300);
+  }
+}
+function applySettings() {
+  markerSettings.outerMode = document.getElementById('sOuter').value;
+  markerSettings.innerMode = document.getElementById('sInner').value;
+  markerSettings.showLotAddr = document.getElementById('sShowLotAddr').checked;
+
+  if (document.getElementById('sUseExactLocation')) {
+    markerSettings.useExactLocation = document.getElementById('sUseExactLocation').checked; // dummy
+  }
+
+  markerSettings.yearFormat = document.getElementById('sYearFormat') ? document.getElementById('sYearFormat').value : 'roc';
+  markerSettings.contentMode = document.getElementById('sContent') ? document.getElementById('sContent').value : 'recent2yr';
+  if (document.getElementById('sDisplayLogic')) markerSettings.displayLogic = document.getElementById('sDisplayLogic').value;
+
+  if (document.getElementById('sThresh14')) {
+    const val = parseInt(document.getElementById('sThresh14').value, 10);
+    markerSettings.autoThresh14 = !isNaN(val) ? val : 8000;
+  }
+  if (document.getElementById('sThresh15')) {
+    const val = parseInt(document.getElementById('sThresh15').value, 10);
+    markerSettings.autoThresh15 = !isNaN(val) ? val : 5000;
+  }
+  if (document.getElementById('sThresh16')) {
+    const val = parseInt(document.getElementById('sThresh16').value, 10);
+    markerSettings.autoThresh16 = !isNaN(val) ? val : 2000;
+  }
+  if (document.getElementById('sThresh17')) {
+    const val = parseInt(document.getElementById('sThresh17').value, 10);
+    markerSettings.autoThresh17 = !isNaN(val) ? val : 0;
+  }
+
+  if (document.getElementById('autoFilterSettings')) {
+    document.getElementById('autoFilterSettings').style.display = markerSettings.displayLogic === 'auto' ? '' : 'none';
+  }
+
+  markerSettings.osmZoom = 16;
+  markerSettings.bubbleMode = document.getElementById('sBubbleMode').value;
+  markerSettings.areaUnit = document.getElementById('sAreaUnit') ? document.getElementById('sAreaUnit').value : 'ping';
+  if (document.getElementById('sThemeToggle')) {
+    markerSettings.themeMode = document.getElementById('sThemeToggle').checked ? 'dark' : 'light';
+    if (markerSettings.themeMode === 'dark') document.body.classList.add('dark-mode');
+    else document.body.classList.remove('dark-mode');
+  }
+
+  // Bivariate thresholds uses defaults
+  markerSettings.bivUnitQ = [25, 40, 60];
+  markerSettings.bivTotalQ = [800, 1500, 2500];
+
+  localStorage.setItem('markerSettings', JSON.stringify(markerSettings));
+  updateLegend();
+  if (txData.length > 0) { renderResults(); plotMarkers(false); }
+}
+function loadSettings() {
+  try {
+    const saved = localStorage.getItem('markerSettings');
+    if (saved) Object.assign(markerSettings, JSON.parse(saved));
+  } catch (e) { }
+  // Ensure valid defaults
+  if (!markerSettings.unitThresholds || markerSettings.unitThresholds.length !== 3) markerSettings.unitThresholds = [20, 45, 70];
+  if (!markerSettings.totalThresholds || markerSettings.totalThresholds.length !== 3) markerSettings.totalThresholds = [500, 1750, 3000];
+  if (!markerSettings.bivUnitQ || markerSettings.bivUnitQ.length !== 3) markerSettings.bivUnitQ = [25, 40, 60];
+  if (!markerSettings.bivTotalQ || markerSettings.bivTotalQ.length !== 3) markerSettings.bivTotalQ = [800, 1500, 2500];
+  if (!markerSettings.bubbleMode) markerSettings.bubbleMode = 'dual_ring';
+  if (!markerSettings.areaUnit) markerSettings.areaUnit = 'ping';
+  if (!markerSettings.themeMode) markerSettings.themeMode = 'light';
+
+  if (document.getElementById('sThemeToggle')) {
+    document.getElementById('sThemeToggle').checked = markerSettings.themeMode === 'dark';
+    if (markerSettings.themeMode === 'dark') document.body.classList.add('dark-mode');
+    else document.body.classList.remove('dark-mode');
+  }
+
+  document.getElementById('sOuter').value = markerSettings.outerMode || 'unit_price';
+  document.getElementById('sInner').value = markerSettings.innerMode || 'total_price';
+  document.getElementById('sShowLotAddr').checked = !!markerSettings.showLotAddr;
+  if (document.getElementById('sYearFormat')) document.getElementById('sYearFormat').value = markerSettings.yearFormat || 'roc';
+  if (document.getElementById('sContent')) document.getElementById('sContent').value = markerSettings.contentMode || 'recent2yr';
+  if (document.getElementById('sDisplayLogic')) document.getElementById('sDisplayLogic').value = markerSettings.displayLogic || 'auto';
+  if (document.getElementById('sAreaUnit')) document.getElementById('sAreaUnit').value = markerSettings.areaUnit || 'ping';
+
+  if (document.getElementById('sUseExactLocation')) {
+    document.getElementById('sUseExactLocation').checked = !!markerSettings.useExactLocation;
+  }
+
+  if (document.getElementById('sThresh14')) document.getElementById('sThresh14').value = markerSettings.autoThresh14 !== undefined ? markerSettings.autoThresh14 : 8000;
+  if (document.getElementById('sThresh15')) document.getElementById('sThresh15').value = markerSettings.autoThresh15 !== undefined ? markerSettings.autoThresh15 : 5000;
+  if (document.getElementById('sThresh16')) document.getElementById('sThresh16').value = markerSettings.autoThresh16 !== undefined ? markerSettings.autoThresh16 : 2000;
+  if (document.getElementById('sThresh17')) document.getElementById('sThresh17').value = markerSettings.autoThresh17 !== undefined ? markerSettings.autoThresh17 : 0;
+
+  if (document.getElementById('autoFilterSettings')) {
+    document.getElementById('autoFilterSettings').style.display = markerSettings.displayLogic === 'auto' ? '' : 'none';
+  }
+
+  document.getElementById('sBubbleMode').value = markerSettings.bubbleMode;
+  document.getElementById('dualRingSettings').style.display = markerSettings.bubbleMode === 'dual_ring' ? '' : 'none';
+  document.getElementById('bivariateSettings').style.display = markerSettings.bubbleMode === 'bivariate' ? '' : 'none';
+
+  const ut = markerSettings.unitThresholds, tt = markerSettings.totalThresholds;
+  document.getElementById('unitMin').value = ut[0]; document.getElementById('unitMax').value = ut[2];
+  document.getElementById('totalMin').value = tt[0]; document.getElementById('totalMax').value = tt[2];
+  updateThresh();
+  renderBivariatePreview();
+  updateLegend();
+}
+
+// ── Area auto search ──
+function toggleAreaAutoSearch(on) {
+  areaAutoSearch = on;
+  try { localStorage.setItem('areaAutoSearch', on ? '1' : '0'); } catch (e) { }
+  if (on && map && map.getZoom() >= (markerSettings.osmZoom || 16)) doAreaSearch();
+}
+function onMapMoveEnd() {
+  if (_isHoveringList || !areaAutoSearch || _hoverPanSuppressed) return;
+  if (map.getZoom() < (markerSettings.osmZoom || 16)) return;
+  clearTimeout(_areaSearchTimer);
+  _areaSearchTimer = setTimeout(() => {
+    if (!_hoverPanSuppressed && areaAutoSearch && map.getZoom() >= (markerSettings.osmZoom || 16)) doAreaSearch();
+  }, 800);
+}
+
+// ── Keyboard shortcuts ──
+document.addEventListener('keydown', e => {
+  if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT') return;
+  if (e.key === '/' || e.key === 's') { document.getElementById('searchInput').focus(); e.preventDefault(); }
 });
-app.mount('#app');
+
+// ── Init ──
+document.addEventListener('DOMContentLoaded', () => {
+  loadSettings(); initMap();
+
+  const sidebarEl = document.getElementById('sidebar');
+  if (sidebarEl) {
+    sidebarEl.addEventListener('mouseenter', () => { _isHoveringList = true; });
+    sidebarEl.addEventListener('mouseleave', () => { _isHoveringList = false; });
+  }
+
+  try {
+    const saved = localStorage.getItem('areaAutoSearch');
+    if (saved === '1') { areaAutoSearch = true; const cb = document.getElementById('areaToggle'); if (cb) cb.checked = true; }
+  } catch (e) { }
+  window.addEventListener('resize', hideAcList);
+  // Close filter dropdown when clicking outside
+  document.addEventListener('click', e => {
+    const dd = document.getElementById('filterDropdown');
+    const btn = document.getElementById('filterToggleBtn');
+    if (dd.classList.contains('show') && !dd.contains(e.target) && !btn.contains(e.target)) {
+      dd.classList.remove('show'); btn.classList.remove('active');
+    }
+  });
+  if (window.innerWidth <= 768) {
+    map.on('click', () => {
+      document.getElementById('sidebar').classList.remove('show');
+      _sidebarCollapsed = true;
+      updateHamburgerIcon();
+    });
+  }
+});

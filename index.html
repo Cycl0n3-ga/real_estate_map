@@ -15,123 +15,126 @@
   <link
     href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Noto+Sans+TC:wght@400;500;700;800&display=swap"
     rel="stylesheet">
-  <!-- MapLibre GL JS -->
-  <link href="https://unpkg.com/maplibre-gl@4.1.3/dist/maplibre-gl.css" rel="stylesheet" />
-  <script src="https://unpkg.com/maplibre-gl@4.1.3/dist/maplibre-gl.js"></script>
-
-  <!-- Vue 3 (Global Build) -->
-  <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
-
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.1/dist/MarkerCluster.css" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.1/dist/MarkerCluster.Default.css" />
   <link rel="stylesheet" href="styles.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://unpkg.com/leaflet.markercluster@1.5.1/dist/leaflet.markercluster.js"></script>
 </head>
 
 <body>
-<div id="app">
 
   <!-- ═══ NAVBAR ═══ -->
   <nav class="navbar" id="navbar">
     <div class="nav-left">
       <div class="nav-logo">🏢 良富居</div>
-      <button class="hamburger" @click="toggleSidebar" title="展開/收合側欄">◀</button>
-      <div class="nav-search autocomplete-wrap">
-        <input type="text" placeholder="搜尋地址 / 建案名稱…"
-          v-model="searchKeyword"
-          @keydown="handleSearchKeydown" @input="onSearchInput" autocomplete="off">
-        <button class="nav-search-btn" @click="doSearch">搜尋</button>
-
-        <div class="autocomplete-list" :class="{ show: ui.acVisible }">
-          <div v-for="(r, i) in ui.acResults" :key="i"
-               class="autocomplete-item" :class="{ selected: i === ui.acIdx }"
-               @click="selectCommunity(r.name)">
-            <span class="ac-name">{{ r.name }}
-               <span class="ac-tag" :class="{ 'exact': r.match_type === '精確', 'contains': r.match_type === '包含', 'fuzzy': r.match_type !== '精確' && r.match_type !== '包含' }">{{ r.match_type }}</span>
-            </span>
-            <span class="ac-meta">{{ r.tx_count }}筆{{ Math.round(r.avg_price / 10000) > 0 ? ' · 均' + Math.round(r.avg_price / 10000) + '萬' : '' }} · {{ r.district || '' }}</span>
-          </div>
-        </div>
+      <button class="hamburger" id="hamburgerBtn" onclick="toggleSidebar()" title="展開/收合側欄">◀</button>
+      <div class="nav-search autocomplete-wrap" id="navSearch">
+        <input id="searchInput" type="text" placeholder="搜尋地址 / 建案名稱…"
+          onkeydown="handleSearchKeydown(event)" oninput="onSearchInput()" autocomplete="off">
+        <button class="nav-search-btn" onclick="doSearch()">搜尋</button>
+        <div class="autocomplete-list" id="acList"></div>
       </div>
     </div>
     <div class="nav-right">
-      <button class="nav-icon-btn" @click="toggleSettings" title="設定">⚙️</button>
+      <button class="nav-icon-btn" id="settingsBtn" onclick="toggleSettings()" title="設定">⚙️</button>
     </div>
   </nav>
 
-  <div class="selected-community" v-if="ui.selectedCommunity">
-    <span>🏠 <b>{{ ui.selectedCommunity }}</b></span>
-    <button @click="clearSelectedCommunity">✖</button>
+      <div><label>建物型態</label>
+        <select id="fBuildType">
+          <option value="">全部</option>
+          <option value="住宅大樓">住宅大樓(11樓含以上有電梯)</option>
+          <option value="華廈">華廈(10樓含以下有電梯)</option>
+          <option value="公寓">公寓(5樓含以下無電梯)</option>
+          <option value="透天厝">透天厝</option>
+          <option value="套房">套房(1房1廳1衛)</option>
+        </select>
+      </div>
+      <div><label>房數</label><input id="fRooms" type="text" placeholder="如 2,3,4"></div>
+      <div><label>坪數範圍</label><input id="fPing" type="text" placeholder="如 20-40"></div>
+      <div><label>公設比 %</label><input id="fRatio" type="text" placeholder="如 0-35"></div>
+      <div><label>單價 (萬/坪)</label><input id="fUnitPrice" type="text" placeholder="如 40-80"></div>
+      <div><label>總價 (萬)</label><input id="fPrice" type="text" placeholder="如 1000-3000"></div>
+      <div><label>歷年範圍</label><input id="fYear" type="text" placeholder="如: 110-114 或 2021-2025"></div>
+  <div id="selectedCommunity" class="selected-community" style="display:none">
+    <span>🏠 <b id="selComName"></b></span>
+    <button onclick="clearSelectedCommunity()">✖</button>
   </div>
 
   <!-- ═══ SETTINGS PANEL ═══ -->
-  <div class="settings-overlay" :class="{ show: ui.settingsVisible }" @click="toggleSettings"></div>
-  <div class="settings-panel" :class="{ show: ui.settingsVisible }">
+  <div class="settings-overlay" id="settingsOverlay" onclick="toggleSettings()"></div>
+  <div class="settings-panel" id="settingsPanel">
     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
       <h3 style="margin:0;">⚙️ 顯示設定</h3>
       <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:12px;font-weight:600;background:var(--bg2);padding:4px 10px;border-radius:12px;border:1px solid var(--border)">
-        <input type="checkbox" v-model="markerSettings.themeMode" true-value="dark" false-value="light" style="margin:0"> 🌙 深色模式
+        <input type="checkbox" id="sThemeToggle" onchange="applySettings()" style="margin:0"> 🌙 深色模式
       </label>
     </div>
 
     <div class="settings-group">
       <div class="settings-group-title">🎨 泡泡模式</div>
-      <select v-model="markerSettings.bubbleMode">
+      <select id="sBubbleMode" onchange="onBubbleModeChange()">
         <option value="dual_ring">雙圈模式（外環 + 內圈）</option>
         <option value="bivariate">雙變數色彩映射（Bivariate）</option>
       </select>
     </div>
 
     <!-- 雙圈模式設定 -->
-    <div v-show="markerSettings.bubbleMode === 'dual_ring'">
+    <div id="dualRingSettings">
       <div class="settings-group">
         <div class="settings-group-title">🔴 雙圈色彩定義</div>
-        <select v-model="markerSettings.outerMode">
+        <select id="sOuter" onchange="applySettings()">
           <option value="unit_price">單價/坪 (外環)</option>
           <option value="total_price">總價 (外環)</option>
         </select>
-        <select v-model="markerSettings.innerMode">
+        <select id="sInner" onchange="applySettings()">
           <option value="total_price">總價 (內圈)</option>
           <option value="unit_price">單價/坪 (內圈)</option>
         </select>
 
         <div class="settings-group-title" style="margin-top:8px">🔶 單價色階 (綠→黃→紅)</div>
         <div class="range-slider-wrap">
-          <div class="rs-label">低於 <span class="highlight-val">{{ markerSettings.unitThresholds[0] }}</span> 萬為綠，高於 <span
-              class="highlight-val">{{ markerSettings.unitThresholds[2] }}</span> 萬為紅</div>
+          <div class="rs-label">低於 <span id="vUnitMin" class="highlight-val">20</span> 萬為綠，高於 <span
+              id="vUnitMax" class="highlight-val">70</span> 萬為紅</div>
           <div class="rs-container">
-            <input type="range" v-model.number="markerSettings.unitThresholds[0]" min="10" max="150" step="5">
-            <input type="range" v-model.number="markerSettings.unitThresholds[2]" min="10" max="150" step="5">
+            <input type="range" id="unitMin" min="10" max="150" value="20" step="5" oninput="updateThresh()">
+            <input type="range" id="unitMax" min="10" max="150" value="70" step="5" oninput="updateThresh()">
           </div>
         </div>
 
         <div class="settings-group-title" style="margin-top:16px">🔶 總價色階 (綠→黃→紅)</div>
         <div class="range-slider-wrap">
-          <div class="rs-label">低於 <span class="highlight-val">{{ markerSettings.totalThresholds[0] }}</span> 萬為綠，高於 <span
-              class="highlight-val">{{ markerSettings.totalThresholds[2] }}</span> 萬為紅</div>
+          <div class="rs-label">低於 <span id="vTotalMin" class="highlight-val">500</span> 萬為綠，高於 <span
+              id="vTotalMax" class="highlight-val">3000</span> 萬為紅</div>
           <div class="rs-container">
-            <input type="range" v-model.number="markerSettings.totalThresholds[0]" min="300" max="8000" step="100">
-            <input type="range" v-model.number="markerSettings.totalThresholds[2]" min="300" max="8000" step="100">
+            <input type="range" id="totalMin" min="300" max="8000" value="500" step="100" oninput="updateThresh()">
+            <input type="range" id="totalMax" min="300" max="8000" value="3000" step="100" oninput="updateThresh()">
           </div>
         </div>
       </div>
     </div>
 
     <!-- 雙變數色彩模式設定 -->
-    <div v-show="markerSettings.bubbleMode === 'bivariate'">
+    <div id="bivariateSettings" style="display:none">
       <div class="settings-group">
         <div class="settings-group-title" style="margin-bottom:4px">🎨 雙變數預設色盤</div>
         <div class="biv-hint">系統自動以固定四等份劃分：<br>單價 (X): 25, 40, 60 萬/坪<br>總價 (Y): 800, 1500, 2500 萬</div>
+        <div id="bivMatrixPreview" class="biv-matrix"></div>
       </div>
     </div>
 
     <div class="settings-group">
-      <div class="settings-group-title">📐 面積/單價單位</div>
-      <select v-model="markerSettings.areaUnit">
+      <div class="settings-group-title">� 面積/單價單位</div>
+      <select id="sAreaUnit" onchange="applySettings()">
         <option value="ping">坪 (萬/坪)</option>
         <option value="sqm">平方公尺 (萬/m²)</option>
       </select>
     </div>
     <div class="settings-group">
       <div class="settings-group-title">�📊 價格計算方式</div>
-      <select v-model="markerSettings.contentMode">
+      <select id="sContent" onchange="applySettings()">
         <option value="recent2yr">近兩年均價(排除特殊)</option>
         <option value="all">全期間均價</option>
       </select>
@@ -139,51 +142,51 @@
     <div class="settings-group">
       <div class="settings-group-title">📋 顯示設定</div>
       <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer">
-        <input type="checkbox" v-model="markerSettings.showLotAddr"> 顯示地號/小段交易
+        <input type="checkbox" id="sShowLotAddr" onchange="applySettings()"> 顯示地號/小段交易
       </label>
       <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;margin-top:6px;">
-        <input type="checkbox" v-model="markerSettings.useExactLocation"> 使用精確位置
+        <input type="checkbox" id="sUseExactLocation" onchange="applySettings()"> 使用精確位置
       </label>
     </div>
     <div class="settings-group">
       <div class="settings-group-title">📅 年份顯示格式</div>
-      <select v-model="markerSettings.yearFormat">
+      <select id="sYearFormat" onchange="applySettings()">
         <option value="roc">民國 (ROC)</option>
         <option value="ce">西元 (CE)</option>
       </select>
     </div>
     <div class="settings-group">
       <div class="settings-group-title">📍 顯示邏輯</div>
-      <select v-model="markerSettings.displayLogic">
+      <select id="sDisplayLogic" onchange="applySettings()">
         <option value="auto">依層級自動過濾 (預設)</option>
         <option value="all">全部顯示</option>
       </select>
-      <div v-show="markerSettings.displayLogic === 'auto'" style="margin-top:10px;">
+      <div id="autoFilterSettings" style="margin-top:10px;">
         <div style="font-size:11px;color:var(--text2);margin-bottom:6px;">自訂各縮放層級顯示之最低總價 (萬)</div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;">
-          <div><label style="font-size:10px;color:var(--text3)">14級(含)以下</label><input type="number" v-model.number="markerSettings.autoThresh14" step="1000"></div>
-          <div><label style="font-size:10px;color:var(--text3)">15級</label><input type="number" v-model.number="markerSettings.autoThresh15" step="1000"></div>
-          <div><label style="font-size:10px;color:var(--text3)">16級</label><input type="number" v-model.number="markerSettings.autoThresh16" step="1000"></div>
-          <div><label style="font-size:10px;color:var(--text3)">17級(含)以上</label><input type="number" v-model.number="markerSettings.autoThresh17" step="1000"></div>
+          <div><label style="font-size:10px;color:var(--text3)">14級(含)以下</label><input type="number" id="sThresh14" onchange="applySettings()" step="1000"></div>
+          <div><label style="font-size:10px;color:var(--text3)">15級</label><input type="number" id="sThresh15" onchange="applySettings()" step="1000"></div>
+          <div><label style="font-size:10px;color:var(--text3)">16級</label><input type="number" id="sThresh16" onchange="applySettings()" step="1000"></div>
+          <div><label style="font-size:10px;color:var(--text3)">17級(含)以上</label><input type="number" id="sThresh17" onchange="applySettings()" step="1000"></div>
         </div>
       </div>
     </div>
   </div>
 
   <!-- ═══ SIDEBAR ═══ -->
-  <div class="sidebar" :class="{ 'collapsed': ui.sidebarCollapsed, 'show': !ui.sidebarCollapsed && windowWidth <= 768 }">
+  <div class="sidebar" id="sidebar">
     <!-- Quick Filters -->
     <div class="quick-filters">
       <span>快速:</span>
-      <button @click="quickFilter('1yr')" :class="{ active: ui.qfMode === '1yr' }">近一年</button>
-      <button @click="quickFilter('2yr')" :class="{ active: ui.qfMode === '2yr' }">近兩年</button>
-      <button @click="quickFilter('nospecial')" :class="{ active: ui.qfMode === 'nospecial' }">排除特殊</button>
-      <button @click="quickFilter('clear')">✕ 清除</button>
+      <button onclick="quickFilter('1yr')" id="qf1yr">近一年</button>
+      <button onclick="quickFilter('2yr')" id="qf2yr">近兩年</button>
+      <button onclick="quickFilter('nospecial')" id="qfNoSpec">排除特殊</button>
+      <button onclick="quickFilter('clear')">✕ 清除</button>
     </div>
 
     <!-- Tools -->
     <div class="sidebar-tools" style="display:flex;gap:6px;padding:6px 12px;border-bottom:1px solid var(--border);align-items:center;position:relative;">
-      <button class="nav-filter-btn" @click="toggleFilters" :class="{ active: ui.filterVisible || filters.fBuildType || filters.fRooms || filters.fPing || filters.fRatio || filters.fUnitPrice || filters.fPrice || filters.fYear || filters.fExcludeSpecial }" title="進階篩選" style="flex:1; justify-content:center;">
+      <button class="nav-filter-btn" onclick="toggleFilters()" id="filterToggleBtn" title="進階篩選" style="flex:1; justify-content:center;">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" />
         </svg>
@@ -191,10 +194,10 @@
       </button>
 
       <!-- FILTER PANEL -->
-      <div class="filter-dropdown" :class="{ show: ui.filterVisible }">
+      <div class="filter-dropdown" id="filterDropdown">
         <div class="filter-grid">
           <div><label>建物型態</label>
-            <select v-model="filters.fBuildType">
+            <select id="fBuildType">
               <option value="">全部</option>
               <option value="住宅大樓">住宅大樓(11樓含以上有電梯)</option>
               <option value="華廈">華廈(10樓含以下有電梯)</option>
@@ -203,110 +206,51 @@
               <option value="套房">套房(1房1廳1衛)</option>
             </select>
           </div>
-          <div><label>房數</label><input v-model="filters.fRooms" type="text" placeholder="如 2,3,4"></div>
-          <div><label>坪數範圍</label><input v-model="filters.fPing" type="text" placeholder="如 20-40"></div>
-          <div><label>公設比 %</label><input v-model="filters.fRatio" type="text" placeholder="如 0-35"></div>
-          <div><label>單價 (萬/坪)</label><input v-model="filters.fUnitPrice" type="text" placeholder="如 40-80"></div>
-          <div><label>總價 (萬)</label><input v-model="filters.fPrice" type="text" placeholder="如 1000-3000"></div>
-          <div><label>歷年範圍</label><input v-model="filters.fYear" type="text" placeholder="如: 110-114 或 2021-2025"></div>
+          <div><label>房數</label><input id="fRooms" type="text" placeholder="如 2,3,4"></div>
+          <div><label>坪數範圍</label><input id="fPing" type="text" placeholder="如 20-40"></div>
+          <div><label>公設比 %</label><input id="fRatio" type="text" placeholder="如 0-35"></div>
+          <div><label>單價 (萬/坪)</label><input id="fUnitPrice" type="text" placeholder="如 40-80"></div>
+          <div><label>總價 (萬)</label><input id="fPrice" type="text" placeholder="如 1000-3000"></div>
+          <div><label>歷年範圍</label><input id="fYear" type="text" placeholder="如: 110-114 或 2021-2025"></div>
           <div class="filter-row-special">
             <label style="display:flex;align-items:center;gap:4px;cursor:pointer;font-size:12px">
-              <input type="checkbox" v-model="filters.fExcludeSpecial"> 排除特殊交易
+              <input type="checkbox" id="fExcludeSpecial"> 排除特殊交易
             </label>
           </div>
         </div>
         <div class="filter-actions">
-          <button class="btn-clear" @click="clearFilters">清除</button>
-          <button class="btn-apply" @click="doSearch(); toggleFilters()">套用篩選</button>
+          <button class="btn-clear" onclick="clearFilters()">清除</button>
+          <button class="btn-apply" onclick="applyFiltersAndSearch()">套用篩選</button>
         </div>
       </div>
     </div>
 
     <!-- Sort -->
     <div class="sort-bar">
-      <button :class="{ active: filters.currentSort === 'date' }" @click="setSort('date')">日期 <span v-if="filters.currentSort==='date'">{{ filters.sortDirection === 'desc' ? '▼' : '▲' }}</span></button>
-      <button :class="{ active: filters.currentSort === 'price' }" @click="setSort('price')">總價 <span v-if="filters.currentSort==='price'">{{ filters.sortDirection === 'desc' ? '▼' : '▲' }}</span></button>
-      <button :class="{ active: filters.currentSort === 'unit_price' }" @click="setSort('unit_price')">單價 <span v-if="filters.currentSort==='unit_price'">{{ filters.sortDirection === 'desc' ? '▼' : '▲' }}</span></button>
-      <button :class="{ active: filters.currentSort === 'ping' }" @click="setSort('ping')">坪數 <span v-if="filters.currentSort==='ping'">{{ filters.sortDirection === 'desc' ? '▼' : '▲' }}</span></button>
-      <button :class="{ active: filters.currentSort === 'public_ratio' }" @click="setSort('public_ratio')">公設 <span v-if="filters.currentSort==='public_ratio'">{{ filters.sortDirection === 'desc' ? '▼' : '▲' }}</span></button>
-      <button :class="{ active: filters.currentSort === 'community' }" @click="setSort('community')">建案 <span v-if="filters.currentSort==='community'">{{ filters.sortDirection === 'desc' ? '▼' : '▲' }}</span></button>
-      <select v-model="filters.limitSelect" class="limit-select" @change="rerunSearch" title="顯示筆數">
+      <button class="active" data-sort="date" onclick="setSort(this)">日期 ▼</button>
+      <button data-sort="price" onclick="setSort(this)">總價</button>
+      <button data-sort="unit_price" onclick="setSort(this)">單價</button>
+      <button data-sort="ping" onclick="setSort(this)">坪數</button>
+      <button data-sort="public_ratio" onclick="setSort(this)">公設</button>
+      <button data-sort="community" onclick="setSort(this)">建案</button>
+      <select id="limitSelect" class="limit-select" onchange="rerunSearch()" title="顯示筆數">
         <option value="250">250筆</option>
         <option value="500">500筆</option>
         <option value="1000">1000筆</option>
-        <option value="2500">2500筆</option>
+        <option value="2500" selected>2500筆</option>
         <option value="5000">5000筆</option>
       </select>
     </div>
 
     <!-- Summary -->
-    <div class="summary-bar" v-if="ui.summary && ui.summary.total" style="display:block">
-      共 <span class="val">{{ ui.summary.total }}</span> 筆 <span v-if="Object.keys(ui.communitySummaries).length > 0">｜ <span class="val">{{ Object.keys(ui.communitySummaries).length }}</span> 個建案</span> ｜ 均價 <span class="val">{{ fmtWan(ui.summary.avg_price) }}</span> ｜ 均面積 <span class="val">{{ fmtAvgArea(ui.summary.avg_ping) }}</span> ｜ 單價 <span class="val">{{ fmtUnitPrice(ui.summary.avg_unit_price_ping) }}</span><br>單價區間 <span class="val">{{ fmtUnitPrice(ui.summary.min_unit_price_ping) }}</span> ~ <span class="val">{{ fmtUnitPrice(ui.summary.max_unit_price_ping) }}</span> ｜ 均公設 <span class="val">{{ ui.summary.avg_ratio || '-' }}%</span>
-    </div>
+    <div class="summary-bar" id="summaryBar"></div>
 
     <!-- Results -->
     <div class="results" id="results">
-      <div v-if="loading" class="loading">
-        <div class="skeleton" style="height:60px;margin:16px"></div>
-        <div class="skeleton" style="height:60px;margin:16px"></div>
-      </div>
-
-      <div v-else-if="emptyMsg" class="empty" v-html="emptyMsg"></div>
-
-      <div v-else-if="transactions.length === 0 && !ui.showingClusterList" class="empty">
+      <div class="empty">
         👆 輸入地址或建案名稱開始搜尋<br>
         <span style="font-size:12px;margin-top:8px;display:block">或開啟「自動顯示建案」功能</span>
       </div>
-
-      <template v-else-if="ui.showingClusterList">
-        <div class="cluster-list-header">
-          <span>📍 此位置 {{ ui.clusterItems.length }} 筆重疊資料</span>
-          <button @click="closeClusterList">↩ 返回全列表</button>
-        </div>
-
-        <div v-for="(group, cn) in clusterGroups" :key="cn">
-          <div style="padding:6px 12px;background:#fff;border-bottom:1px solid var(--border);font-weight:600;font-size:13px;color:var(--text)">🏘️ {{ cn }}（{{ group.length }}筆）</div>
-          <tx-card v-for="tx in group" :key="tx.id" :id="'tx-item-'+tx.id" :tx="tx" :is-active="activeCardIdx === tx.id" @click="selectTx(tx)" @mouseenter="hoverTx(tx)" @mouseleave="unhoverTx"></tx-card>
-        </div>
-      </template>
-
-      <template v-else>
-        <div v-if="ui.communityName && resultGroups.length <= 1 && !ui.isAreaSearch" style="padding:10px 14px;background:var(--green-bg);border-bottom:1px solid var(--border)">
-          <span style="font-weight:800;font-size:14px;color:var(--green)">🏘️ {{ ui.communityName }}</span>
-        </div>
-
-        <div v-for="group in resultGroups" :key="group.name" class="community-group">
-          <div class="community-header" @click="toggleCommunity(group.name)" @mouseenter="hoverCommunity(group.name)" @mouseleave="unhoverCommunity">
-            <span class="ch-arrow" :class="{ open: !ui.collapsedCommunities[group.name] }">▶</span>
-            <div style="flex:1;min-width:0">
-              <div class="ch-name">{{ group.name }}</div>
-              <div v-if="group.stats" class="ch-stats-inline">
-                 <span v-if="group.stats.avg_unit_price_ping > 0">均單 {{ fmtAvgUnitWan(group.stats.avg_unit_price_ping) }}</span>
-                 <span v-if="group.stats.avg_ping > 0">均面積 {{ fmtAvgArea(group.stats.avg_ping) }}</span>
-                 <span v-if="group.stats.avg_ratio > 0">公設 {{ group.stats.avg_ratio.toFixed(0) }}%</span>
-              </div>
-            </div>
-            <span class="ch-count">{{ group.items.length }} 筆</span>
-          </div>
-
-          <div v-if="group.stats && !ui.collapsedCommunities[group.name]" class="community-stats">
-            <div class="cs-item"><span class="cs-label">📊 筆數</span><span class="cs-value">{{ group.items.length }}</span></div>
-            <div class="cs-item"><span class="cs-label">💰 均總</span><span class="cs-value">{{ fmtWan(group.stats.avg_price) }}</span></div>
-            <div class="cs-item"><span class="cs-label"> 均單</span><span class="cs-value">{{ fmtAvgUnitWan(group.stats.avg_unit_price_ping) }}</span></div>
-            <div class="cs-item"><span class="cs-label">📐 均面積</span><span class="cs-value">{{ fmtAvgArea(group.stats.avg_ping) }}</span></div>
-            <div class="cs-item"><span class="cs-label">🏗️ 公設</span><span class="cs-value" :style="{ color: group.stats.avg_ratio > 35 ? 'var(--red)' : group.stats.avg_ratio > 30 ? 'var(--orange)' : 'var(--green)' }">{{ group.stats.avg_ratio > 0 ? group.stats.avg_ratio.toFixed(1) + '%' : '-' }}</span></div>
-          </div>
-
-          <div class="community-items" :class="{ collapsed: ui.collapsedCommunities[group.name] }">
-            <tx-card v-for="item in group.items" :key="item.tx.id" :id="'tx-item-'+item.tx.id" :tx="item.tx" :is-active="activeCardIdx === item.tx.id" @click="selectTx(item.tx)" @mouseenter="hoverTx(item.tx)" @mouseleave="unhoverTx"></tx-card>
-          </div>
-        </div>
-
-        <template v-if="noComItems.length > 0">
-          <div v-if="resultGroups.length > 0" style="padding:6px 14px;background:var(--bg2);border-bottom:1px solid var(--border);font-size:12px;color:var(--text2);font-weight:600">其他交易 ({{ noComItems.length }} 筆)</div>
-          <tx-card v-for="item in noComItems" :key="item.tx.id" :id="'tx-item-'+item.tx.id" :tx="item.tx" :is-active="activeCardIdx === item.tx.id" @click="selectTx(item.tx)" @mouseenter="hoverTx(item.tx)" @mouseleave="unhoverTx"></tx-card>
-        </template>
-      </template>
     </div>
   </div>
 
@@ -314,14 +258,13 @@
   <div class="map-wrap">
     <div id="map"></div>
     <div class="map-controls">
-      <button @click="locateMe()" title="移動到我的位置">📍</button>
-      <button @click="zoomIn()" title="放大">＋</button>
-      <button @click="zoomOut()" title="縮小">－</button>
+      <button onclick="locateMe()" title="移動到我的位置">📍</button>
+      <button onclick="map.zoomIn()" title="放大">＋</button>
+      <button onclick="map.zoomOut()" title="縮小">－</button>
     </div>
   </div>
 
-</div>
-  <script type="module" src="app.js"></script>
+  <script src="app.js"></script>
 </body>
 
 </html>
