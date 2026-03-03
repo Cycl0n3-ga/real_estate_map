@@ -416,7 +416,7 @@ const app = createApp({
       activeCardIdx.value = tx.id;
       if (tx.lat && tx.lng && map) {
         setHoverPanSuppressed(true);
-        map.setView([tx.lat, tx.lng], 17);
+        map.flyTo({ center: [tx.lng, tx.lat], zoom: 17 });
         setTimeout(() => { setHoverPanSuppressed(false); }, 800);
       }
     };
@@ -527,7 +527,14 @@ const app = createApp({
       transactions, activeCardIdx, searchKeyword, loading, errorMsg, emptyMsg,
       ui, markerSettings, areaAutoSearch, filters, windowWidth,
       toggleSidebar, toggleSettings, toggleFilters, onSearchInput, handleSearchKeydown,
-      selectCommunity, clearSelectedCommunity, clearFilters, doSearch, doAreaSearch, locateMe: () => {}, zoomIn: () => { map.zoomIn() }, zoomOut: () => { map.zoomOut() },
+      selectCommunity, clearSelectedCommunity, clearFilters, doSearch, doAreaSearch,
+      locateMe: () => {
+        if (!navigator.geolocation) return;
+        navigator.geolocation.getCurrentPosition((pos) => {
+          if (map) map.flyTo({ center: [pos.coords.longitude, pos.coords.latitude], zoom: 16 });
+        });
+      },
+      zoomIn: () => { map.zoomIn(); }, zoomOut: () => { map.zoomOut(); },
       setSort, rerunSearch, quickFilter, fmtWan, fmtAvgUnitWan, fmtUnitPrice, fmtAvgArea,
       resultGroups, noComItems, clusterGroups, toggleCommunity, hoverCommunity, unhoverCommunity,
       selectTx, hoverTx, unhoverTx, closeClusterList
