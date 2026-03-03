@@ -30,7 +30,7 @@ npx serve .
 
 前端預設連線至：
 ```
-http://140.114.78.136:5001
+https://volodos.cs.nthu.edu.tw:5001
 ```
 如需修改，編輯 `app.js` 第一行的 `API_BASE` 常數。
 
