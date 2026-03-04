@@ -1,9 +1,13 @@
 // map.js
 import { API_BASE } from './api.js';
 
-let map, markerClusterGroup, markerGroup;
+let map;
 let locationMarker, locationCircle;
 let _markerTooltipEl = null;
+let clusterIndex = null;
+export let activeMarkers = [];
+let _getSettingsMap = null;
+let _showClusterListCallbackMap = null;
 
 // Re-use logic for color mapping
 const BIVARIATE_MATRIX = [
@@ -102,77 +106,57 @@ function formatDateStrMap(raw, settings) {
 
 
 export function initMapInstance(getSettings, onMapMoveEnd, showClusterListCallback) {
-    map = L.map('map', { zoomControl: false }).setView([23.6978, 120.9605], 8);
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager_labels_under/{z}/{x}/{y}{r}.png', {
-        maxZoom: 20, attribution: '&copy; OpenStreetMap & CartoDB'
-    }).addTo(map);
+    _getSettingsMap = getSettings;
+    _showClusterListCallbackMap = showClusterListCallback;
 
-    const iconCreateFn = function (cluster) {
-        const settings = getSettings();
-        const markers = cluster.getAllChildMarkers();
-        let totalPrice = 0, validP = 0, totalUnit = 0, validU = 0, totalCount = 0;
-        markers.forEach(m => {
-            const gc = m._groupCount || 1; totalCount += gc;
-            if (m._avgPrice > 0) { totalPrice += m._avgPrice * gc; validP += gc; }
-            if (m._avgUnitPrice > 0) { totalUnit += m._avgUnitPrice * gc; validU += gc; }
-        });
-        const avgPriceWan = validP > 0 ? (totalPrice / validP / 10000) : 0;
-        const avgUnitWan = validU > 0 ? (totalUnit / validU / 10000) : 0;
-
-        let sz = 44;
-        if (totalCount >= 100) sz = 60; else if (totalCount >= 30) sz = 54; else if (totalCount >= 10) sz = 48;
-        let priceText = '';
-        if (avgPriceWan >= 10000) priceText = (avgPriceWan / 10000).toFixed(1) + '億';
-        else if (avgPriceWan >= 1) priceText = avgPriceWan.toFixed(0) + '萬';
-
-        const line1 = priceText || totalCount + '筆';
-        const line2 = priceText ? totalCount + '筆' : '';
-        let svgHtml;
-
-        if (settings.bubbleMode === 'bivariate') {
-            const bvColor = getBivariateColor(avgUnitWan, avgPriceWan, settings);
-            svgHtml = makeBivariateSVG({ sz, color: bvColor, line1, line2 });
-        } else {
-            const outerColor = getColorForMode(settings.outerMode, avgPriceWan, avgUnitWan, settings);
-            const innerColor = getColorForMode(settings.innerMode, avgPriceWan, avgUnitWan, settings);
-            svgHtml = makeDualRingSVG({ sz, outerColor, innerColor, line1, line2 });
-        }
-
-        const labels = markers.map(m => m._groupLabel).filter(Boolean);
-        const uniqueLabels = [...new Set(labels)];
-        const commLabel = uniqueLabels.length === 1 ? uniqueLabels[0].substring(0, 6) : (uniqueLabels.length > 1 ? uniqueLabels.length + ' 個建案' : '');
-        const labelHtml = commLabel ? `<div style="margin-top:-2px;padding:1px 4px;background:rgba(255,255,255,.95);border-radius:5px;font-size:8px;font-weight:600;color:#333;white-space:nowrap;max-width:70px;overflow:hidden;text-overflow:ellipsis;box-shadow:0 1px 3px rgba(0,0,0,.1);border:1px solid rgba(0,0,0,.06)">${commLabel}</div>` : '';
-        const totalH = commLabel ? sz + 14 : sz;
-        return L.divIcon({
-            html: `<div style="display:flex;flex-direction:column;align-items:center">${svgHtml}${labelHtml}</div>`,
-            className: 'price-marker custom-cluster-icon',
-            iconSize: [sz + 8, totalH], iconAnchor: [(sz + 8) / 2, totalH / 2]
-        });
-    };
-
-    markerClusterGroup = L.markerClusterGroup({
-        spiderfyOnMaxZoom: true, showCoverageOnHover: false, zoomToBoundsOnClick: false,
-        maxClusterRadius: 40, spiderfyDistanceMultiplier: 2.5, iconCreateFunction: iconCreateFn
+    map = new maplibregl.Map({
+        container: 'map',
+        style: {
+            version: 8,
+            sources: {
+                'carto-voyager': {
+                    type: 'raster',
+                    tiles: [
+                        'https://a.basemaps.cartocdn.com/rastertiles/voyager_labels_under/{z}/{x}/{y}.png',
+                        'https://b.basemaps.cartocdn.com/rastertiles/voyager_labels_under/{z}/{x}/{y}.png',
+                        'https://c.basemaps.cartocdn.com/rastertiles/voyager_labels_under/{z}/{x}/{y}.png',
+                        'https://d.basemaps.cartocdn.com/rastertiles/voyager_labels_under/{z}/{x}/{y}.png'
+                    ],
+                    tileSize: 256,
+                    attribution: '&copy; OpenStreetMap & CartoDB'
+                }
+            },
+            layers: [
+                {
+                    id: 'carto-voyager-layer',
+                    type: 'raster',
+                    source: 'carto-voyager',
+                    minzoom: 0,
+                    maxzoom: 22
+                }
+            ]
+        },
+        center: [120.9605, 23.6978],
+        zoom: 8,
+        minZoom: 4,
+        maxZoom: 20,
+        pitchWithRotate: false,
+        dragRotate: false
     });
 
-    markerClusterGroup.on('clusterclick', a => a.layer.spiderfy());
-    markerClusterGroup.on('spiderfied', e => {
-        e.cluster._icon.classList.add('spider-focus');
-        e.markers.forEach(m => { if (m._icon) m._icon.classList.add('spider-focus'); });
-        document.getElementById('map').classList.add('spiderfied-active');
-    });
-    markerClusterGroup.on('unspiderfied', e => {
-        if (e.cluster._icon) e.cluster._icon.classList.remove('spider-focus');
-        e.markers.forEach(m => { if (m._icon) m._icon.classList.remove('spider-focus'); });
-        document.getElementById('map').classList.remove('spiderfied-active');
+    map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'bottom-right');
+
+    clusterIndex = new Supercluster({
+        radius: 40,
+        maxZoom: 16
     });
 
-    map.addLayer(markerClusterGroup);
-    markerGroup = L.featureGroup().addTo(map);
-    map.on('moveend', onMapMoveEnd);
+    map.on('moveend', () => {
+        updateMapMarkers();
+        if (onMapMoveEnd) onMapMoveEnd();
+    });
 
-    // Add legend initialization logic here, which will be updated by Vue
-    return { map, markerClusterGroup, markerGroup };
+    return { map };
 }
 
 let _lastBouncingEls = [];
@@ -187,16 +171,19 @@ export function bounceElement(el) {
     _lastBouncingEls = [el];
 }
 
-export function hoverTxOnMap(idx, mapInstance, mcGroup, suppressPanCallback) {
+export function hoverTxOnMap(idx, mapInstance, suppressPanCallback) {
     let targetMarker = null;
-    mcGroup.eachLayer(layer => {
-        if (!targetMarker && layer._groupItems && layer._groupItems.some(it => it.origIdx === idx)) targetMarker = layer;
-    });
+    for (let i = 0; i < activeMarkers.length; i++) {
+        if (activeMarkers[i]._groupItems && activeMarkers[i]._groupItems.some(it => it.origIdx === idx)) {
+            targetMarker = activeMarkers[i];
+            break;
+        }
+    }
     if (!targetMarker) return;
-    const ll = targetMarker.getLatLng();
+    const ll = targetMarker.getLngLat();
     if (!mapInstance.getBounds().contains(ll)) {
         suppressPanCallback(true);
-        mapInstance.panTo(ll, { animate: true, duration: 0.25 });
+        mapInstance.flyTo({ center: ll, duration: 250 });
         setTimeout(() => { suppressPanCallback(false); }, 600);
     }
     const tryBounce = () => {
@@ -204,30 +191,29 @@ export function hoverTxOnMap(idx, mapInstance, mcGroup, suppressPanCallback) {
         bounceElement(iconEl.firstElementChild || iconEl);
     };
     if (targetMarker._icon) tryBounce();
-    else mcGroup.zoomToShowLayer(targetMarker, () => setTimeout(tryBounce, 100));
 }
 
 export function unhoverTxOnMap() {
     stopAllBounce(); hideMarkerTooltip();
 }
 
-export function hoverCommunityOnMap(name, mapInstance, mcGroup, suppressPanCallback) {
+export function hoverCommunityOnMap(name, mapInstance, suppressPanCallback) {
     stopAllBounce();
     document.getElementById('map').classList.add('hover-unblur');
     const matched = [];
-    mcGroup.eachLayer(layer => {
+    activeMarkers.forEach(layer => {
         if (layer._groupLabel === name || (layer._groupItems && layer._groupItems.some(it => it.tx.community_name === name)))
             matched.push(layer);
     });
     if (matched.length === 0) return;
     const bounds = mapInstance.getBounds();
-    const anyVisible = matched.some(m => m._icon && bounds.contains(m.getLatLng()));
+    const anyVisible = matched.some(m => m._icon && bounds.contains(m.getLngLat()));
     if (!anyVisible) {
         suppressPanCallback(true);
-        mapInstance.panTo(matched[0].getLatLng(), { animate: true, duration: 0.3 });
+        mapInstance.flyTo({ center: matched[0].getLngLat(), duration: 300 });
         setTimeout(() => { suppressPanCallback(false); }, 600);
     }
-    const first = matched.find(m => m._icon && bounds.contains(m.getLatLng())) || matched[0];
+    const first = matched.find(m => m._icon && bounds.contains(m.getLngLat())) || matched[0];
     const doBounce = () => { if (!first._icon) return; bounceElement(first._icon.firstElementChild || first._icon); };
     if (first._icon) doBounce(); else setTimeout(doBounce, 350);
 }
@@ -297,25 +283,50 @@ export function isLotAddress(addr) { return /^\S*段\S*地號/.test(addr) || /�
 
 
 let _legendControl = null, _legendDiv = null;
+
+class LegendControl {
+    constructor(getLegendHtml, updateAreaAutoSearchCallback) {
+        this.getLegendHtml = getLegendHtml;
+        this.updateAreaAutoSearchCallback = updateAreaAutoSearchCallback;
+    }
+
+    onAdd(map) {
+        this._map = map;
+        this._container = document.createElement('div');
+        this._container.className = 'custom-legend-wrap maplibregl-ctrl';
+        this._container.innerHTML = this.getLegendHtml();
+
+        // Disable scroll and click propagation
+        this._container.addEventListener('wheel', (e) => e.stopPropagation());
+        this._container.addEventListener('mousedown', (e) => e.stopPropagation());
+        this._container.addEventListener('dblclick', (e) => e.stopPropagation());
+        this._container.addEventListener('click', (e) => e.stopPropagation());
+
+        _legendDiv = this._container;
+
+        setTimeout(() => {
+            const toggle = _legendDiv.querySelector('#areaToggle');
+            if (toggle) {
+                toggle.addEventListener('change', (e) => this.updateAreaAutoSearchCallback(e.target.checked));
+            }
+        }, 0);
+
+        return this._container;
+    }
+
+    onRemove() {
+        if (this._container && this._container.parentNode) {
+            this._container.parentNode.removeChild(this._container);
+        }
+        this._map = undefined;
+        _legendDiv = null;
+    }
+}
+
 export function addLegendToMap(mapInstance, getLegendHtml, updateAreaAutoSearchCallback) {
     if (_legendControl) return;
-    _legendControl = L.control({ position: 'bottomleft' });
-    _legendControl.onAdd = function () {
-        _legendDiv = L.DomUtil.create('div', 'custom-legend-wrap');
-        _legendDiv.innerHTML = getLegendHtml();
-        L.DomEvent.disableScrollPropagation(_legendDiv);
-        L.DomEvent.disableClickPropagation(_legendDiv);
-
-        // Ensure to bind events
-        setTimeout(() => {
-             const toggle = _legendDiv.querySelector('#areaToggle');
-             if (toggle) {
-                 toggle.addEventListener('change', (e) => updateAreaAutoSearchCallback(e.target.checked));
-             }
-        }, 0);
-        return _legendDiv;
-    };
-    _legendControl.addTo(mapInstance);
+    _legendControl = new LegendControl(getLegendHtml, updateAreaAutoSearchCallback);
+    mapInstance.addControl(_legendControl, 'bottom-left');
 }
 
 export function updateLegendOnMap(getLegendHtml, updateAreaAutoSearchCallback) {
@@ -328,11 +339,139 @@ export function updateLegendOnMap(getLegendHtml, updateAreaAutoSearchCallback) {
 }
 
 
-export function plotMarkersOnMap(txData, markerSettings, mapInstance, markerClusterGroup, fitBounds, showClusterListCallback) {
-    markerClusterGroup.clearLayers();
-    const boundsArr = [], groups = buildGroups(txData, markerSettings);
-    const currentZoom = mapInstance ? mapInstance.getZoom() : 16;
-    const minPrice = (markerSettings.displayLogic !== 'all') ? getMinPriceThreshold(currentZoom, markerSettings) : 0;
+export function clearMapMarkers() {
+    activeMarkers.forEach(m => m.remove());
+    activeMarkers = [];
+}
+
+export function updateMapMarkers() {
+    if (!map || !clusterIndex) return;
+
+    clearMapMarkers();
+
+    const bounds = map.getBounds();
+    const bbox = [bounds.getWest(), bounds.getSouth(), bounds.getEast(), bounds.getNorth()];
+    const zoom = Math.floor(map.getZoom());
+
+    const clusters = clusterIndex.getClusters(bbox, zoom);
+    const settings = _getSettingsMap();
+
+    clusters.forEach(cluster => {
+        let totalCount = 0;
+        let totalPrice = 0;
+        let totalUnit = 0;
+        let validP = 0;
+        let validU = 0;
+        let items = [];
+        let labels = [];
+
+        if (cluster.properties.cluster) {
+            const leaves = clusterIndex.getLeaves(cluster.properties.cluster_id, Infinity);
+            leaves.forEach(leaf => {
+                const props = leaf.properties;
+                const gc = props.groupCount || 1;
+                totalCount += gc;
+                if (props.avgPrice > 0) { totalPrice += props.avgPrice * gc; validP += gc; }
+                if (props.avgUnitPrice > 0) { totalUnit += props.avgUnitPrice * gc; validU += gc; }
+                if (props.groupLabel) labels.push(props.groupLabel);
+                items = items.concat(props.items);
+            });
+        } else {
+            const props = cluster.properties;
+            const gc = props.groupCount || 1;
+            totalCount += gc;
+            if (props.avgPrice > 0) { totalPrice += props.avgPrice * gc; validP += gc; }
+            if (props.avgUnitPrice > 0) { totalUnit += props.avgUnitPrice * gc; validU += gc; }
+            if (props.groupLabel) labels.push(props.groupLabel);
+            items = items.concat(props.items);
+        }
+
+        const avgPriceWan = validP > 0 ? (totalPrice / validP / 10000) : 0;
+        const avgUnitWan = validU > 0 ? (totalUnit / validU / 10000) : 0;
+
+        let sz = 44;
+        if (totalCount >= 100) sz = 60; else if (totalCount >= 30) sz = 54; else if (totalCount >= 10) sz = 48;
+        if (totalCount === 1) sz = 42;
+        let priceText = '';
+        if (avgPriceWan >= 10000) priceText = (avgPriceWan / 10000).toFixed(1) + '億';
+        else if (avgPriceWan >= 1) priceText = avgPriceWan.toFixed(0) + '萬'; else priceText = '-';
+
+        const line1 = priceText || totalCount + '筆';
+        const line2 = priceText ? (totalCount === 1 ? '' : totalCount + '筆') : '';
+        let svgHtml;
+
+        if (settings.bubbleMode === 'bivariate') {
+            const bvColor = getBivariateColor(avgUnitWan, avgPriceWan, settings);
+            svgHtml = makeBivariateSVG({ sz, color: bvColor, line1, line2 });
+        } else {
+            const outerColor = getColorForMode(settings.outerMode, avgPriceWan, avgUnitWan, settings);
+            const innerColor = getColorForMode(settings.innerMode, avgPriceWan, avgUnitWan, settings);
+            svgHtml = makeDualRingSVG({ sz, outerColor, innerColor, line1, line2 });
+        }
+
+        const uniqueLabels = [...new Set(labels.filter(Boolean))];
+        const commLabel = uniqueLabels.length === 1 ? uniqueLabels[0].substring(0, 8) : (uniqueLabels.length > 1 ? uniqueLabels.length + ' 個建案' : '');
+        const labelHtml = commLabel ? `<div style="margin-top:-2px;padding:1px 5px;background:rgba(255,255,255,.95);border-radius:5px;font-size:${totalCount > 1 ? 9 : 8}px;font-weight:700;color:#333;white-space:nowrap;max-width:80px;overflow:hidden;text-overflow:ellipsis;box-shadow:0 1px 3px rgba(0,0,0,.1);border:1px solid rgba(0,0,0,.06)">${escHtml(commLabel)}</div>` : '';
+        const totalH = commLabel ? sz + 15 : sz;
+
+        const el = document.createElement('div');
+        el.className = 'price-marker custom-cluster-icon';
+        el.style.display = 'flex';
+        el.style.flexDirection = 'column';
+        el.style.alignItems = 'center';
+        el.style.width = (sz + 8) + 'px';
+        el.style.height = totalH + 'px';
+        el.style.cursor = 'pointer';
+        el.innerHTML = `${svgHtml}${labelHtml}`;
+
+        const marker = new maplibregl.Marker({
+            element: el,
+            anchor: 'center',
+            offset: [0, 0]
+        }).setLngLat(cluster.geometry.coordinates).addTo(map);
+
+        marker._groupCount = totalCount;
+        marker._avgPrice = totalPrice / (validP || 1);
+        marker._avgUnitPrice = totalUnit / (validU || 1);
+        marker._groupLabel = uniqueLabels.length === 1 ? uniqueLabels[0] : '';
+        marker._groupItems = items;
+        marker._icon = el;
+
+        const groupFake = {
+            label: marker._groupLabel,
+            communityName: marker._groupLabel,
+            items: items
+        };
+
+        el.addEventListener('mouseenter', () => onMarkerHover(marker, groupFake, settings));
+        el.addEventListener('mouseleave', () => onMarkerUnhover());
+        el.addEventListener('click', (e) => {
+            e.stopPropagation();
+            if (cluster.properties.cluster && zoom < 16) {
+                map.flyTo({
+                    center: cluster.geometry.coordinates,
+                    zoom: zoom + 2,
+                    speed: 1.2
+                });
+            } else {
+                if (_showClusterListCallbackMap) {
+                    _showClusterListCallbackMap(items);
+                }
+            }
+        });
+
+        activeMarkers.push(marker);
+    });
+}
+
+export function plotMarkersOnMap(txData, markerSettings, mapInstance, fitBounds) {
+    if (!clusterIndex) return;
+    const groups = buildGroups(txData, markerSettings);
+    const features = [];
+    const minPrice = (markerSettings.displayLogic !== 'all') ? getMinPriceThreshold(mapInstance ? mapInstance.getZoom() : 16, markerSettings) : 0;
+
+    let bounds = new maplibregl.LngLatBounds();
+    let hasValidBounds = false;
 
     groups.forEach(g => {
         const n = g.items.length; if (n === 0) return;
@@ -345,36 +484,32 @@ export function plotMarkersOnMap(txData, markerSettings, mapInstance, markerClus
         if (minPrice > 0 && avgPrice < minPrice) return;
 
         const avgUnitPrice = useRecent ? g.recentAvgUnitPrice : (g.unitPrices.length ? g.unitPrices.reduce((a, b) => a + b, 0) / g.unitPrices.length : 0);
-        const avgPriceWan = avgPrice / 10000, avgUnitWan = avgUnitPrice / 10000;
-        const label = g.label ? g.label.substring(0, 8) : '';
-        let priceText = '';
-        if (avgPriceWan >= 10000) priceText = (avgPriceWan / 10000).toFixed(1) + '億';
-        else if (avgPriceWan >= 1) priceText = Math.round(avgPriceWan) + '萬'; else priceText = '-';
-        let sz = n >= 20 ? 56 : (n >= 5 ? 50 : 44); if (n === 1) sz = 42;
-        let line1 = priceText, line2 = n === 1 ? '' : n + '筆';
 
-        let svgHtml;
-        if (markerSettings.bubbleMode === 'bivariate') {
-            svgHtml = makeBivariateSVG({ sz, color: getBivariateColor(avgUnitWan, avgPriceWan, markerSettings), line1, line2 });
-        } else {
-            const outerColor = getColorForMode(markerSettings.outerMode, avgPriceWan, avgUnitWan, markerSettings);
-            const innerColor = getColorForMode(markerSettings.innerMode, avgPriceWan, avgUnitWan, markerSettings);
-            svgHtml = makeDualRingSVG({ sz, outerColor, innerColor, line1, line2 });
-        }
+        features.push({
+            type: 'Feature',
+            properties: {
+                groupCount: n,
+                avgPrice: avgPrice,
+                avgUnitPrice: avgUnitPrice,
+                groupLabel: g.label,
+                items: g.items
+            },
+            geometry: {
+                type: 'Point',
+                coordinates: [lng, lat]
+            }
+        });
 
-        const labelHtml = label ? `<div style="margin-top:-2px;padding:1px 5px;background:rgba(255,255,255,.95);border-radius:5px;font-size:${n > 1 ? 9 : 8}px;font-weight:700;color:#333;white-space:nowrap;max-width:80px;overflow:hidden;text-overflow:ellipsis;box-shadow:0 1px 3px rgba(0,0,0,.1);border:1px solid rgba(0,0,0,.06)">${escHtml(label)}</div>` : '';
-        const totalH = label ? sz + 15 : sz;
-        const icon = L.divIcon({ html: `<div style="display:flex;flex-direction:column;align-items:center">${svgHtml}${labelHtml}</div>`, iconSize: [sz + 8, totalH], iconAnchor: [(sz + 8) / 2, totalH / 2], className: 'price-marker' });
-        const marker = L.marker([lat, lng], { icon });
-        marker._groupCount = n; marker._avgPrice = avgPrice; marker._avgUnitPrice = avgUnitPrice; marker._groupLabel = g.label; marker._groupItems = g.items;
-
-        marker.on('mouseover', () => onMarkerHover(marker, g, markerSettings));
-        marker.on('mouseout', () => onMarkerUnhover());
-        marker.on('click', () => showClusterListCallback(g.items));
-        markerClusterGroup.addLayer(marker);
-        boundsArr.push([lat, lng]);
+        bounds.extend([lng, lat]);
+        hasValidBounds = true;
     });
-    if (fitBounds && boundsArr.length > 0) mapInstance.fitBounds(boundsArr, { padding: [40, 40], maxZoom: 18 });
+
+    clusterIndex.load(features);
+    updateMapMarkers();
+
+    if (fitBounds && hasValidBounds) {
+        mapInstance.fitBounds(bounds, { padding: 40, maxZoom: 18, duration: 800 });
+    }
 }
 
 function buildGroups(txData, markerSettings) {
@@ -422,8 +557,8 @@ function startCompass(mapInstance) {
         } else if (e.alpha !== null) {
             heading = 360 - e.alpha;
         }
-        if (heading !== null && locationMarker && locationMarker._icon) {
-            const headingEl = locationMarker._icon.querySelector('.locate-heading');
+        if (heading !== null && locationMarker && locationMarker.getElement()) {
+            const headingEl = locationMarker.getElement().querySelector('.locate-heading');
             if (headingEl) {
                 headingEl.style.display = 'block';
                 headingEl.style.transform = `rotate(${heading}deg)`;
@@ -452,15 +587,38 @@ export function locateUserOnMap(mapInstance) {
 
     navigator.geolocation.getCurrentPosition(pos => {
         const { latitude: lat, longitude: lng, accuracy } = pos.coords;
-        mapInstance.setView([lat, lng], 16);
-        if (locationMarker) mapInstance.removeLayer(locationMarker);
-        if (locationCircle) mapInstance.removeLayer(locationCircle);
+        mapInstance.flyTo({ center: [lng, lat], zoom: 16 });
+        if (locationMarker) locationMarker.remove();
+        if (locationCircle) locationCircle.remove();
 
-        locationCircle = L.circle([lat, lng], { radius: accuracy, color: 'var(--primary)', fillColor: 'var(--primary)', fillOpacity: .1, weight: 1 }).addTo(mapInstance);
+        // Calculate approximate pixels for circle based on accuracy and latitude
+        const elCircle = document.createElement('div');
+        elCircle.style.backgroundColor = 'var(--primary)';
+        elCircle.style.opacity = '0.1';
+        elCircle.style.borderRadius = '50%';
+        elCircle.style.border = '1px solid var(--primary)';
+        elCircle.style.pointerEvents = 'none';
 
-        const iconHtml = `<div class="locate-marker-wrap"><div class="locate-heading"></div><div class="locate-pulse"></div></div>`;
-        locationMarker = L.marker([lat, lng], { icon: L.divIcon({ html: iconHtml, iconSize: [48, 48], className: '' }), zIndexOffset: 1000 }).addTo(mapInstance).bindPopup(`📍 您的位置<br><span style="font-size:11px;color:var(--text2)">精確度: ±${Math.round(accuracy)}m</span>`).openPopup();
+        // This is a rough estimation of radius in pixels for the given zoom level (16)
+        const metersPerPixel = 156543.03392 * Math.cos(lat * Math.PI / 180) / Math.pow(2, 16);
+        const radiusPx = accuracy / metersPerPixel;
+        elCircle.style.width = (radiusPx * 2) + 'px';
+        elCircle.style.height = (radiusPx * 2) + 'px';
 
-        setTimeout(() => { if (locationCircle) { mapInstance.removeLayer(locationCircle); locationCircle = null; } }, 5000);
+        locationCircle = new maplibregl.Marker({ element: elCircle, anchor: 'center' })
+            .setLngLat([lng, lat])
+            .addTo(mapInstance);
+
+        const elMarker = document.createElement('div');
+        elMarker.innerHTML = `<div class="locate-marker-wrap" style="width:48px;height:48px"><div class="locate-heading"></div><div class="locate-pulse"></div></div>`;
+
+        locationMarker = new maplibregl.Marker({ element: elMarker, anchor: 'center' })
+            .setLngLat([lng, lat])
+            .setPopup(new maplibregl.Popup({ offset: 25 }).setHTML(`📍 您的位置<br><span style="font-size:11px;color:var(--text2)">精確度: ±${Math.round(accuracy)}m</span>`))
+            .addTo(mapInstance);
+
+        locationMarker.togglePopup();
+
+        setTimeout(() => { if (locationCircle) { locationCircle.remove(); locationCircle = null; } }, 5000);
     }, err => { alert('定位失敗: ' + err.message); }, { enableHighAccuracy: true, timeout: 10000 });
 }
