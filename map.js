@@ -254,24 +254,15 @@ export function hoverCommunityOnMap(name, mapInstance, mcGroup, suppressPanCallb
     stopAllBounce();
     document.getElementById('map').classList.add('hover-unblur');
 
-    // dim all markers first
-    mcGroup.eachLayer(layer => {
-        if (layer._icon) {
-            layer._icon.classList.add('dim');
-            const inner = layer._icon.querySelector && layer._icon.querySelector('.price-marker');
-            if (inner) inner.classList.add('dim');
-        }
-    });
+    // overlay will grey background; no per-marker dim needed
 
     // clear previous focus markers
     _hoverFocusMarkers.forEach(m => {
         if (m._icon) {
             m._icon.classList.remove('focus');
-            m._icon.classList.remove('dim');
             const inner = m._icon.querySelector && m._icon.querySelector('.price-marker');
             if (inner) {
                 inner.classList.remove('focus');
-                inner.classList.remove('dim');
             }
         }
     });
@@ -291,15 +282,9 @@ export function hoverCommunityOnMap(name, mapInstance, mcGroup, suppressPanCallb
     console.log("matched markers count", matched.length);
     _hoverFocusMarkers = matched;
 
-    // also remove dim from matched markers inner nodes
-    matched.forEach(layer => {
-        if (layer._icon) {
-            const inner = layer._icon.querySelector && layer._icon.querySelector('.price-marker');
-            if (inner) inner.classList.remove('dim');
-        }
-    });
+    // highlight matched markers (focus class removed dim earlier automatically)
 
-    if (matched.length === 0) return;
+    if (matched.length === 0) { hideOverlay(); return; }
     const bounds = mapInstance.getBounds();
     const anyVisible = matched.some(m => m._icon && bounds.contains(m.getLatLng()));
     if (!anyVisible) {
@@ -314,7 +299,7 @@ export function hoverCommunityOnMap(name, mapInstance, mcGroup, suppressPanCallb
 
 export function unhoverCommunityOnMap() {
     stopAllBounce();
-    document.getElementById('map').classList.remove('hover-unblur');
+    hideOverlay();
     // remove dim/focus from all markers
     _hoverFocusMarkers.forEach(m => {
         if (m._icon) {
@@ -324,15 +309,6 @@ export function unhoverCommunityOnMap() {
         }
     });
     _hoverFocusMarkers = [];
-    if (markerClusterGroup) {
-        markerClusterGroup.eachLayer(layer => {
-            if (layer._icon) {
-                layer._icon.classList.remove('dim');
-                const inner = layer._icon.querySelector && layer._icon.querySelector('.price-marker');
-                if (inner) inner.classList.remove('dim');
-            }
-        });
-    }
 }
 
 function showMarkerTooltip(marker, group, settings) {
