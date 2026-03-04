@@ -83,7 +83,33 @@ function fmtAvgAreaMap(avgPing, settings) {
 function fmtBuildDate(raw, settings) {
     if (!raw) return '-';
     const s = String(raw).trim();
-    if (s.length >= 5) { const y = settings.yearFormat === 'ce' ? parseInt(s.substring(0, 3), 10) + 1911 : parseInt(s.substring(0, 3), 10); return y + '/' + s.substring(3, 5); }
+
+    // backend used to supply ROC numeric string (e.g. "11305").
+    // newer versions may already format as Chinese ("民國113年05月01日"),
+    // so guard against parseInt producing NaN.  Handle both cases.
+
+    // if string starts with the Chinese prefix, try extracting year/month
+    const chineseMatch = s.match(/^\s*民國\s*(\d+)\s*年\s*(\d{1,2})/);
+    if (chineseMatch) {
+        const rocY = parseInt(chineseMatch[1], 10);
+        const mm = chineseMatch[2].padStart(2, '0');
+        if (!isNaN(rocY)) {
+            const y = settings && settings.yearFormat === 'ce' ? rocY + 1911 : rocY;
+            return y + '/' + mm;
+        }
+        // fall through to return raw string below
+    }
+
+    // fallback: numeric ROC string like "11305" or longer
+    if (s.length >= 5) {
+        const rocY = parseInt(s.substring(0, 3), 10);
+        if (!isNaN(rocY)) {
+            const y = settings && settings.yearFormat === 'ce' ? rocY + 1911 : rocY;
+            return y + '/' + s.substring(3, 5);
+        }
+    }
+
+    // nothing parsable, just show original value to avoid NaN
     return s || '-';
 }
 
@@ -176,6 +202,8 @@ export function initMapInstance(getSettings, onMapMoveEnd, showClusterListCallba
 }
 
 let _lastBouncingEls = [];
+// markers that should remain clear when a community is being hovered
+let _hoverFocusMarkers = [];
 export function stopAllBounce() {
     _lastBouncingEls.forEach(el => { if (el) el.classList.remove('marker-bounce'); });
     _lastBouncingEls = [];
@@ -214,11 +242,21 @@ export function unhoverTxOnMap() {
 export function hoverCommunityOnMap(name, mapInstance, mcGroup, suppressPanCallback) {
     stopAllBounce();
     document.getElementById('map').classList.add('hover-unblur');
+
+    // clear previous focus markers
+    _hoverFocusMarkers.forEach(m => { if (m._icon) m._icon.classList.remove('focus'); });
+    _hoverFocusMarkers = [];
+
+    const names = Array.isArray(name) ? name : [name];
     const matched = [];
     mcGroup.eachLayer(layer => {
-        if (layer._groupLabel === name || (layer._groupItems && layer._groupItems.some(it => it.tx.community_name === name)))
+        if (names.some(n => layer._groupLabel === n || (layer._groupItems && layer._groupItems.some(it => it.tx.community_name === n)))) {
             matched.push(layer);
+            if (layer._icon) layer._icon.classList.add('focus');
+        }
     });
+    _hoverFocusMarkers = matched;
+
     if (matched.length === 0) return;
     const bounds = mapInstance.getBounds();
     const anyVisible = matched.some(m => m._icon && bounds.contains(m.getLatLng()));
@@ -235,6 +273,9 @@ export function hoverCommunityOnMap(name, mapInstance, mcGroup, suppressPanCallb
 export function unhoverCommunityOnMap() {
     stopAllBounce();
     document.getElementById('map').classList.remove('hover-unblur');
+    // clear focus classes
+    _hoverFocusMarkers.forEach(m => { if (m._icon) m._icon.classList.remove('focus'); });
+    _hoverFocusMarkers = [];
 }
 
 function showMarkerTooltip(marker, group, settings) {

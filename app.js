@@ -516,7 +516,28 @@ createApp({
         };
 
         const toggleCommunity = (name) => {
-            collapsedCommunities[name] = !collapsedCommunities[name];
+            const newState = !collapsedCommunities[name];
+            collapsedCommunities[name] = newState;
+            // if map is available, highlight the opened communities (blur others)
+            if (mapInstance && markerClusterGroup) {
+                if (!newState) {
+                    // build array of all currently-expanded community names
+                    const openNames = Object.keys(collapsedCommunities).filter(n => !collapsedCommunities[n]);
+                    if (openNames.length > 0) {
+                        hoverCommunityOnMap(openNames, mapInstance, markerClusterGroup, (suppressed) => { _hoverPanSuppressed = suppressed; });
+                    } else {
+                        unhoverCommunityOnMap();
+                    }
+                } else {
+                    // just collapsed one group; if other groups still open, highlight them
+                    const openNames = Object.keys(collapsedCommunities).filter(n => !collapsedCommunities[n]);
+                    if (openNames.length > 0) {
+                        hoverCommunityOnMap(openNames, mapInstance, markerClusterGroup, (suppressed) => { _hoverPanSuppressed = suppressed; });
+                    } else {
+                        unhoverCommunityOnMap();
+                    }
+                }
+            }
         };
 
         // --- Interaction ---
