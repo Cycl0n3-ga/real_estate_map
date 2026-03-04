@@ -4,7 +4,7 @@
 
 ## 功能
 
-- 🗺️ Leaflet 互動地圖 + 群聚 marker
+- 🗺️ MapLibre GL JS 互動地圖 + Supercluster 群聚 marker
 - 🔍 關鍵字搜尋 / 建案自動完成 / 區域搜尋
 - 🎨 雙圈模式（Dual Ring）+ 雙變數色彩（Bivariate 4×4）
 - 📊 建案統計 / 篩選 / 排序
@@ -41,11 +41,13 @@ frontend/
 ├── index.html   # 主頁面
 ├── styles.css   # 樣式（白色主題）
 ├── app.js       # 應用邏輯
+├── map.js       # 地圖模組（MapLibre GL JS + Supercluster）
+├── api.js       # API 呼叫模組
 └── README.md
 ```
 
 ## 技術
 
-- **地圖**: Leaflet 1.9.4 + Leaflet.markercluster 1.5.3
+- **地圖**: MapLibre GL JS 3.6.2 + Supercluster 8.0.1
 - **樣式**: 純 CSS（無框架），CSS Variables
 - **JS**: 純 Vanilla JS（無框架/打包工具）
