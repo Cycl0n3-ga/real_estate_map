@@ -240,7 +240,9 @@ export function unhoverTxOnMap() {
 }
 
 export function hoverCommunityOnMap(name, mapInstance, mcGroup, suppressPanCallback) {
+    console.debug("hoverCommunityOnMap called with", name);
     stopAllBounce();
+    document.getElementById('map').classList.add('hover-unblur');
 
     // dim all markers first
     mcGroup.eachLayer(layer => {
@@ -262,6 +264,7 @@ export function hoverCommunityOnMap(name, mapInstance, mcGroup, suppressPanCallb
             }
         }
     });
+    console.debug("matched markers count", matched.length);
     _hoverFocusMarkers = matched;
 
     if (matched.length === 0) return;
@@ -279,6 +282,7 @@ export function hoverCommunityOnMap(name, mapInstance, mcGroup, suppressPanCallb
 
 export function unhoverCommunityOnMap() {
     stopAllBounce();
+    document.getElementById('map').classList.remove('hover-unblur');
     // remove dim/focus from all markers
     _hoverFocusMarkers.forEach(m => { if (m._icon) m._icon.classList.remove('focus'); });
     _hoverFocusMarkers = [];
