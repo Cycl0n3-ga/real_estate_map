@@ -5,6 +5,7 @@ let map;
 let locationMarker, locationCircle;
 let _markerTooltipEl = null;
 let clusterIndex = null;
+let clusterIndexLoaded = false;
 export let activeMarkers = [];
 let _getSettingsMap = null;
 let _showClusterListCallbackMap = null;
@@ -369,7 +370,7 @@ export function clearMapMarkers() {
 }
 
 export function updateMapMarkers() {
-    if (!map || !clusterIndex) return;
+    if (!map || !clusterIndex || !clusterIndexLoaded) return;
 
     clearMapMarkers();
 
@@ -539,6 +540,7 @@ export function plotMarkersOnMap(txData, markerSettings, mapInstance, fitBounds)
     });
 
     clusterIndex.load(features);
+    clusterIndexLoaded = true;
     updateMapMarkers();
 
     if (fitBounds && hasValidBounds) {
