@@ -212,6 +212,30 @@ export function initMapInstance(getSettings, onMapMoveEnd, showClusterListCallba
 }
 
 let _lastBouncingEls = [];
+
+// overlay element reference
+let _overlayRef = null;
+function ensureOverlay() {
+    if (_overlayRef) return _overlayRef;
+    console.log("ensureOverlay called");
+    const ov = document.createElement('div');
+    ov.id = 'map-overlay';
+    ov.style.position = 'fixed';
+    ov.style.top = '0';
+    ov.style.left = '0';
+    ov.style.right = '0';
+    ov.style.bottom = '0';
+    ov.style.background = 'rgba(0,0,0,0.3)';
+    ov.style.zIndex = '10000';
+    ov.style.pointerEvents = 'auto';
+    ov.addEventListener('click', e => { e.stopPropagation(); });
+    document.body.appendChild(ov);
+    _overlayRef = ov;
+    return ov;
+}
+function showOverlay() { const ov = ensureOverlay(); if (ov) { ov.style.display = 'block'; console.log("showOverlay"); }}
+function hideOverlay() { if (_overlayRef) { _overlayRef.style.display = 'none'; console.log("hideOverlay"); }}
+
 // markers that should remain clear when a community is being hovered
 let _hoverFocusMarkers = [];
 export function stopAllBounce() {
@@ -252,7 +276,8 @@ export function unhoverTxOnMap() {
 export function hoverCommunityOnMap(name, mapInstance, mcGroup, suppressPanCallback) {
     console.log("hoverCommunityOnMap called with", name);
     stopAllBounce();
-    document.getElementById('map').classList.add('hover-unblur');
+    showOverlay();
+    //document.getElementById('map').classList.add('hover-unblur');
 
     // overlay will grey background; no per-marker dim needed
 
