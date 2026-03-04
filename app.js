@@ -88,9 +88,11 @@ createApp({
         // Map integration refs
         let mapInstance = null;
 
+        const windowWidth = ref(window.innerWidth);
+
         // --- Computed ---
         const hamburgerIcon = computed(() => {
-            if (window.innerWidth <= 768) return sidebarCollapsed.value ? '▲' : '▼';
+            if (windowWidth.value <= 768) return sidebarCollapsed.value ? '▲' : '▼';
             return sidebarCollapsed.value ? '▶' : '◀';
         });
 
@@ -183,9 +185,9 @@ createApp({
         const toggleSidebar = () => {
             if (sidebarCollapsed.value) {
                 sidebarCollapsed.value = false;
-                if (window.innerWidth <= 768) sidebarShowMobile.value = true;
+                if (windowWidth.value <= 768) sidebarShowMobile.value = true;
             } else {
-                if (window.innerWidth <= 768) {
+                if (windowWidth.value <= 768) {
                     sidebarShowMobile.value = false;
                     sidebarCollapsed.value = true;
                 } else {
@@ -406,7 +408,7 @@ createApp({
             if (mapInstance) {
                 plotMarkersOnMap(txData.value, markerSettings, mapInstance, fitBounds);
             }
-            if (window.innerWidth <= 768) sidebarShowMobile.value = false;
+            if (windowWidth.value <= 768) sidebarShowMobile.value = false;
         };
 
         // --- Data Processing ---
@@ -525,7 +527,7 @@ createApp({
                 .sort((a, b) => b[1].length - a[1].length)
                 .map(([name, items]) => ({ name, items }));
             clusterGroups.value = comList;
-            if (window.innerWidth <= 768) sidebarShowMobile.value = true;
+            if (windowWidth.value <= 768) sidebarShowMobile.value = true;
         };
 
         const closeClusterList = () => {
@@ -680,6 +682,9 @@ createApp({
 
         // --- Lifecycle ---
         onMounted(() => {
+            window.addEventListener('resize', () => {
+                windowWidth.value = window.innerWidth;
+            });
             loadSettings();
 
             const initRes = initMapInstance(() => markerSettings, handleMapMoveEnd, openClusterList);
@@ -718,7 +723,7 @@ createApp({
                 }
             });
 
-            if (window.innerWidth <= 768) {
+            if (windowWidth.value <= 768) {
                 mapInstance.on('click', () => {
                     sidebarShowMobile.value = false;
                     sidebarCollapsed.value = true;
