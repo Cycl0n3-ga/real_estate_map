@@ -19,6 +19,7 @@ createApp({
         const acResults = ref([]);
         const acIdx = ref(-1);
         let _acTimer = null;
+        const isComposing = ref(false);  // track IME composition state
 
         const selectedCommunity = ref('');
         const searchedCommunityName = ref(null);
@@ -37,7 +38,7 @@ createApp({
             outerMode: 'unit_price', innerMode: 'total_price',
             contentMode: 'recent2yr',
             unitThresholds: [20, 45, 70], totalThresholds: [500, 1750, 3000],
-            displayLogic: 'auto', osmZoom: 16, showLotAddr: false, yearFormat: 'roc',
+            displayLogic: 'auto', osmZoom: 16, showLotAddr: false, yearFormat: 'ce',
             useExactLocation: false,
             autoThresh14: 8000, autoThresh15: 5000, autoThresh16: 2000, autoThresh17: 0,
             areaUnit: 'ping', themeMode: 'light',
@@ -259,6 +260,7 @@ createApp({
         const hideAcList = () => { showAcList.value = false; acResults.value = []; acIdx.value = -1; };
 
         const handleSearchKeydown = (e) => {
+            if (isComposing.value) return; // ignore keystrokes during composition
             if (showAcList.value && acResults.value.length > 0) {
                 if (e.key === 'ArrowDown') { e.preventDefault(); acIdx.value = Math.min(acIdx.value + 1, acResults.value.length - 1); return; }
                 if (e.key === 'ArrowUp') { e.preventDefault(); acIdx.value = Math.max(acIdx.value - 1, -1); return; }
@@ -281,7 +283,13 @@ createApp({
                 try {
                     const data = await fetchAcResultsFromApi(kw);
                     if (data.success && data.results && data.results.length > 0) {
-                        acResults.value = data.results; acIdx.value = -1; showAcList.value = true;
+                        // prefer exact/contains results; only show fuzzy if nothing else
+                        let items = data.results;
+                        const good = items.filter(r => r.match_type !== '模糊');
+                        if (good.length > 0) items = good;
+                        acResults.value = items.slice(0, 8);
+                        acIdx.value = -1;
+                        showAcList.value = true;
                     } else hideAcList();
                 } catch(e) { hideAcList(); }
             }, 250);
@@ -366,6 +374,26 @@ createApp({
         const handleSearchResult = (data, fitBounds = true) => {
             let resData = data.transactions || [];
             if (!markerSettings.showLotAddr) resData = resData.filter(tx => !isLotAddress(tx.address_raw || tx.address || ''));
+            // if no results but keyword was given, attempt to geocode and pan map
+            const kw = searchKeyword.value.trim();
+            const geocodeAndPan = async (query) => {
+                if (!mapInstance || !query) return;
+                try {
+                    const resp = await fetch(
+                        `https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=tw&q=${encodeURIComponent(query)}`
+                    );
+                    const arr = await resp.json();
+                    if (arr && arr.length > 0) {
+                        const lat = parseFloat(arr[0].lat), lng = parseFloat(arr[0].lon);
+                        if (!isNaN(lat) && !isNaN(lng)) {
+                            mapInstance.setView([lat, lng], 15);
+                        }
+                    }
+                } catch (e) {
+                    // ignore geocode failure
+                }
+            };
+
 
             if (data.search_type !== 'area' && selectedCommunity.value) {
                 const mainCounty = data.district ? data.district.substring(0, 3) : '';
@@ -393,6 +421,8 @@ createApp({
                 if(markerClusterGroup) markerClusterGroup.clearLayers();
                 txData.value = [];
                 processResults();
+                // try geocoding to at least move map to keyword
+                if (kw) geocodeAndPan(kw);
                 return;
             }
 
@@ -686,6 +716,12 @@ createApp({
             else document.body.classList.remove('dark-mode');
         }, { immediate: true });
 
+        // automatically hide conflicting popups
+        watch(showFilters, v => { if (v) showAcList.value = false; });
+        watch(showAcList, v => { if (v) showFilters.value = false; });
+        watch(clusterListItems, v => { if (v.length > 0) { showAcList.value = false; showFilters.value = false; } });
+
+
         // --- Lifecycle ---
         onMounted(() => {
             loadSettings();
@@ -744,6 +780,7 @@ createApp({
             isLoading, searchMessage, summary, collapsedCommunities, hoveredCommunity,
             resultGroups, noComItems, activeCardIdx, clusterListItems, clusterGroups,
             hamburgerIcon, hasActiveFilters, summaryHtml,
+            isComposing,
 
             toggleSidebar, toggleSettings, toggleFilters, clearFilters, applyFiltersAndSearch, quickFilter,
             handleSearchKeydown, onSearchInput, selectCommunity, clearSelectedCommunity, doSearch, rerunSearch,
