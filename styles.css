@@ -407,12 +407,12 @@ select {
 
 .price-marker { background:none !important; border:none !important; }
 
-/* when hovering or expanding a community, fade out non‑focused markers */
-#map.hover-unblur .price-marker {
+/* per-marker dimming when not focused */
+.price-marker.dim {
   filter: blur(2px) grayscale(0.6) opacity(0.4);
   transition: filter .2s, opacity .2s;
 }
-#map.hover-unblur .price-marker.focus {
+.price-marker.focus {
   filter: none !important;
   opacity: 1 !important;
 }

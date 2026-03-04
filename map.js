@@ -241,10 +241,14 @@ export function unhoverTxOnMap() {
 
 export function hoverCommunityOnMap(name, mapInstance, mcGroup, suppressPanCallback) {
     stopAllBounce();
-    document.getElementById('map').classList.add('hover-unblur');
+
+    // dim all markers first
+    mcGroup.eachLayer(layer => {
+        if (layer._icon) layer._icon.classList.add('dim');
+    });
 
     // clear previous focus markers
-    _hoverFocusMarkers.forEach(m => { if (m._icon) m._icon.classList.remove('focus'); });
+    _hoverFocusMarkers.forEach(m => { if (m._icon) { m._icon.classList.remove('focus'); m._icon.classList.remove('dim'); } });
     _hoverFocusMarkers = [];
 
     const names = Array.isArray(name) ? name : [name];
@@ -252,7 +256,10 @@ export function hoverCommunityOnMap(name, mapInstance, mcGroup, suppressPanCallb
     mcGroup.eachLayer(layer => {
         if (names.some(n => layer._groupLabel === n || (layer._groupItems && layer._groupItems.some(it => it.tx.community_name === n)))) {
             matched.push(layer);
-            if (layer._icon) layer._icon.classList.add('focus');
+            if (layer._icon) {
+                layer._icon.classList.add('focus');
+                layer._icon.classList.remove('dim');
+            }
         }
     });
     _hoverFocusMarkers = matched;
@@ -272,10 +279,14 @@ export function hoverCommunityOnMap(name, mapInstance, mcGroup, suppressPanCallb
 
 export function unhoverCommunityOnMap() {
     stopAllBounce();
-    document.getElementById('map').classList.remove('hover-unblur');
-    // clear focus classes
+    // remove dim/focus from all markers
     _hoverFocusMarkers.forEach(m => { if (m._icon) m._icon.classList.remove('focus'); });
     _hoverFocusMarkers = [];
+    if (markerClusterGroup) {
+        markerClusterGroup.eachLayer(layer => {
+            if (layer._icon) layer._icon.classList.remove('dim');
+        });
+    }
 }
 
 function showMarkerTooltip(marker, group, settings) {
