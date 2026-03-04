@@ -284,7 +284,11 @@ html, body {
 .community-stats .cs-item { display:flex; flex-direction:column; align-items:center; }
 .community-stats .cs-label { color:var(--text3); font-size:10px; }
 .community-stats .cs-value { font-weight:700; color:var(--text); font-size:12px; }
-.community-items { overflow:hidden; transition:max-height .35s ease; }
+.community-items {
+  overflow:hidden; transition:max-height .35s ease;
+  /* restore grey background for expanded group so header and cards appear on a light panel */
+  background: var(--bg2);
+}
 .community-items.collapsed { max-height:0 !important; overflow:hidden; }
 
 /* ════════ Transaction Card ════════ */
@@ -509,7 +513,16 @@ html, body {
 }
 .highlight-val { font-weight:700; color:var(--primary); }
 
-.custom-legend-wrap { margin-bottom: 24px !important; margin-left: 12px !important; }
+.custom-legend-wrap {
+  margin-bottom: 24px !important;
+  margin-left: 12px !important;
+  /* make the floating legend readable regardless of map tiles */
+  background: var(--glass);
+  padding: 8px;
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
+}
+
 
 /* Area toggle */
 .area-toggle-wrap { display:flex; align-items:center; gap:6px; }
@@ -531,7 +544,10 @@ html, body {
 /* ════════ Autocomplete ════════ */
 .autocomplete-wrap { position:relative; }
 .autocomplete-list {
-  position:fixed; z-index:2000; background:#fff;
+  /* position absolute so the suggestion box stays aligned with the input
+     instead of jumping around when the page scrolls or the layout changes */
+  position:absolute; top:calc(100% + 4px); left:0; width:100%;
+  z-index:2000; background:#fff;
   border:1px solid var(--border); border-radius:var(--radius);
   max-height:300px; overflow-y:auto; box-shadow:var(--shadow-lg); display:none;
 }

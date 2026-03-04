@@ -272,16 +272,41 @@ function hideMarkerTooltip() { if (_markerTooltipEl) { _markerTooltipEl.remove()
 
 export function onMarkerHover(marker, group, settings) {
     if (marker._icon) bounceElement(marker._icon.firstElementChild || marker._icon);
+    // determine which list container is visible (normal results or cluster overlay)
+    const overlay = document.querySelector('.cluster-list-overlay');
+    const container = (overlay && overlay.style.display !== 'none' && overlay.offsetParent !== null)
+        ? overlay
+        : document.querySelector('.results');
+
+    const scrollToElement = (el) => {
+        if (!el || !container) return;
+        // compute offset inside container to account for sticky headers
+        const containerRect = container.getBoundingClientRect();
+        const elRect = el.getBoundingClientRect();
+        const offset = elRect.top - containerRect.top - containerRect.height / 2 + elRect.height / 2;
+        container.scrollBy({ top: offset, behavior: 'smooth' });
+    };
+
     const cn = group.communityName || group.label || '';
     if (cn) {
-        const allHeaders = document.querySelectorAll('.community-header');
+        const allHeaders = container ? container.querySelectorAll('.community-header') : document.querySelectorAll('.community-header');
         for (const h of allHeaders) {
             const nameEl = h.querySelector('.ch-name');
-            if (nameEl && nameEl.textContent.trim() === cn) { h.scrollIntoView({ behavior: 'smooth', block: 'center' }); h.classList.add('hover-highlight'); break; }
+            if (nameEl && nameEl.textContent.trim() === cn) {
+                scrollToElement(h);
+                h.classList.add('hover-highlight');
+                break;
+            }
         }
     } else if (group.items.length > 0) {
-        const card = document.querySelector(`.tx-card[data-idx="${group.items[0].origIdx}"]`);
-        if (card) card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        // card selector differs if cluster overlay is active
+        let card;
+        if (container === overlay) {
+            card = container.querySelector(`#cluster-tx-item-${group.items[0].origIdx}`);
+        } else {
+            card = container ? container.querySelector(`.tx-card[data-idx="${group.items[0].origIdx}"]`) : null;
+        }
+        if (card) scrollToElement(card);
     }
     showMarkerTooltip(marker, group, settings);
 }

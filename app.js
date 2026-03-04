@@ -269,6 +269,10 @@ createApp({
         };
 
         const onSearchInput = () => {
+            // clear any inline search prompt when user starts typing again
+            if (searchMessage.value && searchMessage.value.startsWith('請輸入搜尋')) {
+                searchMessage.value = '';
+            }
             if (selectedCommunity.value) clearSelectedCommunity();
             const kw = searchKeyword.value.trim();
             if (kw.length < 2) { hideAcList(); return; }
@@ -297,7 +301,9 @@ createApp({
         const doSearch = async () => {
             const kw = searchKeyword.value.trim();
             if (!kw && !hasActiveFilters.value && !selectedCommunity.value) {
-                alert('請輸入搜尋關鍵字或選擇篩選條件'); return;
+                // show inline message instead of annoying alert
+                searchMessage.value = '請輸入搜尋關鍵字或選擇篩選條件';
+                return;
             }
             if (!kw && !selectedCommunity.value) {
                 doAreaSearch(); return;
