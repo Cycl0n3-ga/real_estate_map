@@ -276,7 +276,7 @@
                     <div class="cs-item"><span class="cs-label">🏗️ 公設</span><span class="cs-value" :style="{ color: group.stats.avg_ratio > 35 ? 'var(--red)' : group.stats.avg_ratio > 30 ? 'var(--orange)' : 'var(--green)' }">{{ group.stats.avg_ratio > 0 ? group.stats.avg_ratio.toFixed(1) + '%' : '-' }}</span></div>
                 </div>
                 <div class="community-items" :class="{ collapsed: collapsedCommunities[group.name] }" :style="{ maxHeight: collapsedCommunities[group.name] ? '0' : '999999px' }">
-                    <div v-for="item in group.items" :key="item.origIdx"
+                    <div v-for="item in getVisibleItems(group)" :key="item.origIdx"
                          class="tx-card" :class="[getPriceClass(item.tx), { active: activeCardIdx === item.origIdx, special: item.tx.is_special }]"
                          @click="selectTx(item.origIdx)" @mouseenter="hoverTx(item.origIdx)" @mouseleave="unhoverTx" :id="'tx-item-'+item.origIdx">
                         <div v-html="getColorDotSvg(item.tx)"></div>
@@ -302,6 +302,9 @@
                             <span v-if="item.tx.note" style="color:var(--text3);font-size:10px">📝 {{ item.tx.note.length > 30 ? item.tx.note.substring(0, 30) + '…' : item.tx.note }}</span>
                         </div>
                     </div>
+                    <div v-if="hasMoreItems(group)" class="load-more-btn" @click="loadMoreItems(group.name)">
+                        顯示更多（剩餘 {{ group.items.length - getVisibleItems(group).length }} 筆）
+                    </div>
                 </div>
             </div>
 
@@ -309,7 +312,7 @@
                 <div v-if="resultGroups.length > 0" style="padding:6px 14px;background:var(--bg2);border-bottom:1px solid var(--border);font-size:12px;color:var(--text2);font-weight:600">
                     其他交易 ({{ noComItems.length }} 筆)
                 </div>
-                <div v-for="item in noComItems" :key="item.origIdx"
+                <div v-for="item in getVisibleNoComItems()" :key="item.origIdx"
                      class="tx-card" :class="[getPriceClass(item.tx), { active: activeCardIdx === item.origIdx, special: item.tx.is_special }]"
                      @click="selectTx(item.origIdx)" @mouseenter="hoverTx(item.origIdx)" @mouseleave="unhoverTx" :id="'tx-item-'+item.origIdx">
                         <div v-html="getColorDotSvg(item.tx)"></div>
@@ -334,6 +337,9 @@
                             <span v-if="item.tx.has_parking" class="tx-parking-tag">🚗 含車位{{ item.tx.parking_price > 0 ? ' ' + fmtWan(item.tx.parking_price) : '' }}</span>
                             <span v-if="item.tx.note" style="color:var(--text3);font-size:10px">📝 {{ item.tx.note.length > 30 ? item.tx.note.substring(0, 30) + '…' : item.tx.note }}</span>
                         </div>
+                </div>
+                <div v-if="hasMoreNoComItems()" class="load-more-btn" @click="loadMoreNoComItems()">
+                    顯示更多（剩餘 {{ noComItems.length - getVisibleNoComItems().length }} 筆）
                 </div>
             </div>
 

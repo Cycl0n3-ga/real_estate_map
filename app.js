@@ -78,6 +78,11 @@ createApp({
         const resultGroups = ref([]);
         const noComItems = ref([]);
 
+        // 虛擬滾動：每個建案群組初始只渲染少量項目
+        const VIRTUAL_PAGE_SIZE = 10;
+        const groupVisibleCount = reactive({});  // { groupName: number }
+        const noComVisibleCount = ref(VIRTUAL_PAGE_SIZE);
+
         const activeCardIdx = ref(-1);
 
         const clusterListItems = ref([]);
@@ -505,6 +510,41 @@ createApp({
 
             resultGroups.value = groups;
             noComItems.value = noComs;
+
+            // 重設虛擬滾動計數
+            Object.keys(groupVisibleCount).forEach(k => delete groupVisibleCount[k]);
+            groups.forEach(g => { groupVisibleCount[g.name] = VIRTUAL_PAGE_SIZE; });
+            noComVisibleCount.value = VIRTUAL_PAGE_SIZE;
+        };
+
+        /** 取得某群組目前可見的項目（虛擬滾動用） */
+        const getVisibleItems = (group) => {
+            const limit = groupVisibleCount[group.name] || VIRTUAL_PAGE_SIZE;
+            return group.items.slice(0, limit);
+        };
+
+        /** 某群組是否還有更多未顯示項目 */
+        const hasMoreItems = (group) => {
+            return (groupVisibleCount[group.name] || VIRTUAL_PAGE_SIZE) < group.items.length;
+        };
+
+        /** 載入更多項目 */
+        const loadMoreItems = (groupName) => {
+            const current = groupVisibleCount[groupName] || VIRTUAL_PAGE_SIZE;
+            groupVisibleCount[groupName] = current + VIRTUAL_PAGE_SIZE;
+        };
+
+        /** 無建案項目：取得可見項目 */
+        const getVisibleNoComItems = () => {
+            return noComItems.value.slice(0, noComVisibleCount.value);
+        };
+
+        const hasMoreNoComItems = () => {
+            return noComVisibleCount.value < noComItems.value.length;
+        };
+
+        const loadMoreNoComItems = () => {
+            noComVisibleCount.value += VIRTUAL_PAGE_SIZE;
         };
 
         const computeLocalStats = (items) => {
@@ -516,26 +556,17 @@ createApp({
         };
 
         const toggleCommunity = (name) => {
+            console.debug("toggleCommunity", name, "current state", collapsedCommunities[name]);
             const newState = !collapsedCommunities[name];
             collapsedCommunities[name] = newState;
             // if map is available, highlight the opened communities (blur others)
             if (mapInstance && markerClusterGroup) {
-                if (!newState) {
-                    // build array of all currently-expanded community names
-                    const openNames = Object.keys(collapsedCommunities).filter(n => !collapsedCommunities[n]);
-                    if (openNames.length > 0) {
-                        hoverCommunityOnMap(openNames, mapInstance, markerClusterGroup, (suppressed) => { _hoverPanSuppressed = suppressed; });
-                    } else {
-                        unhoverCommunityOnMap();
-                    }
+                const openNames = Object.keys(collapsedCommunities).filter(n => !collapsedCommunities[n]);
+                console.debug("openNames after toggle", openNames);
+                if (openNames.length > 0) {
+                    hoverCommunityOnMap(openNames, mapInstance, markerClusterGroup, (suppressed) => { _hoverPanSuppressed = suppressed; });
                 } else {
-                    // just collapsed one group; if other groups still open, highlight them
-                    const openNames = Object.keys(collapsedCommunities).filter(n => !collapsedCommunities[n]);
-                    if (openNames.length > 0) {
-                        hoverCommunityOnMap(openNames, mapInstance, markerClusterGroup, (suppressed) => { _hoverPanSuppressed = suppressed; });
-                    } else {
-                        unhoverCommunityOnMap();
-                    }
+                    unhoverCommunityOnMap();
                 }
             }
         };
@@ -808,6 +839,8 @@ createApp({
             setSort, toggleCommunity, selectTx, hoverTx, unhoverTx, hoverCommunity, unhoverCommunity,
             closeClusterList, onBubbleModeChange, updateThresh, applySettings, getBivariateMatrixPreview,
             locateMe, zoomIn, zoomOut,
+            getVisibleItems, hasMoreItems, loadMoreItems,
+            getVisibleNoComItems, hasMoreNoComItems, loadMoreNoComItems,
 
             fmtWan, fmtArea, fmtUnitPrice, fmtAvgArea, fmtAvgUnitWan, formatDateStr, getMatchTagClass, getPriceClass, getColorDotSvg
         };
