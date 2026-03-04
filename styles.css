@@ -59,6 +59,25 @@ html, body {
   z-index:1100;
   box-shadow:0 1px 4px rgba(0,0,0,.04);
 }
+
+/* custom arrow for selects */
+select {
+  -webkit-appearance:none;
+  -moz-appearance:none;
+  appearance:none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath fill='none' stroke='%23475369' stroke-width='1.5' d='M1 1l4 4 4-4'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  padding-right: 24px;
+}
+
+/* ensure dropdowns and overlays stack nicely */
+.filter-dropdown { z-index: 1150; }
+.autocomplete-list { z-index: 1200; }
+.cluster-list-overlay { z-index: 1300; }
+.settings-panel { z-index: 1250; }
+
+
 .nav-left { display:flex; align-items:center; gap:8px; flex:1; min-width:0; }
 .nav-right { display:flex; align-items:center; gap:4px; flex-shrink:0; }
 .nav-logo {
@@ -552,6 +571,19 @@ html, body {
   max-height:300px; overflow-y:auto; box-shadow:var(--shadow-lg); display:none;
 }
 .autocomplete-list.show { display:block; }
+
+/* ════════ cluster list overlay full‑screen █████ */
+.cluster-list-overlay {
+  position:fixed; top:0; left:0; right:0; bottom:0;
+  background: rgba(255,255,255,0.92);
+  backdrop-filter: blur(6px);
+  z-index:2000;
+  overflow-y:auto;
+}
+.cluster-list-overlay .cluster-list-header {
+  position:sticky; top:0; background:inherit; z-index:1;
+}
+
 .autocomplete-item {
   padding:10px 14px; cursor:pointer; font-size:13px;
   border-bottom:1px solid var(--border); transition:background .12s;
@@ -666,6 +698,20 @@ body.dark-mode .special-badge {
     border-radius:var(--radius-lg) var(--radius-lg) 0 0;
     box-shadow:0 -4px 20px rgba(0,0,0,0.15);
   }
+  .results {
+    /* center cards and restrict width for better reading */
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    padding:0 12px;
+  }
+  .results > * {
+    width:100%;
+    max-width:480px;
+  }
+  .results .tx-card {
+    width:100%;
+  }
   .sidebar.show { transform:translateY(0); }
   .sidebar.collapsed { transform:translateY(100%); }
   .map-wrap { left:0; bottom:0; }
@@ -676,7 +722,12 @@ body.dark-mode .special-badge {
   .tx-price { font-size:16px; }
   .community-stats { grid-template-columns:repeat(3,1fr); }
   .nav-search input { font-size:16px; }
-  .map-controls { bottom:calc(50dvh + env(safe-area-inset-bottom) + 12px); right:8px; }
+  /* mobile: keep controls visible above list */
+  .map-controls {
+    top: calc(var(--navbar-h) + 8px);
+    bottom: auto;
+    right: 8px;
+  }
   .map-controls button { width:36px; height:36px; font-size:16px; }
   .settings-panel { width:100%; max-width:100vw; border-radius:0; }
   .selected-community { left:10px; top:calc(var(--navbar-h) + 4px); }
