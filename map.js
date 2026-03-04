@@ -181,7 +181,16 @@ export function initMapInstance(getSettings, onMapMoveEnd, showClusterListCallba
         maxClusterRadius: 40, spiderfyDistanceMultiplier: 2.5, iconCreateFunction: iconCreateFn
     });
 
-    markerClusterGroup.on('clusterclick', a => a.layer.spiderfy());
+    markerClusterGroup.on('clusterclick', a => {
+        // when clicking a cluster, spiderfy and highlight contained communities
+        const layer = a.layer;
+        layer.spiderfy();
+        const childMarkers = layer.getAllChildMarkers();
+        const labels = [...new Set(childMarkers.map(m => m._groupLabel).filter(Boolean))];
+        if (labels.length > 0) {
+            hoverCommunityOnMap(labels, map, markerClusterGroup, () => {});
+        }
+    });
     markerClusterGroup.on('spiderfied', e => {
         e.cluster._icon.classList.add('spider-focus');
         e.markers.forEach(m => { if (m._icon) m._icon.classList.add('spider-focus'); });
@@ -196,6 +205,7 @@ export function initMapInstance(getSettings, onMapMoveEnd, showClusterListCallba
     map.addLayer(markerClusterGroup);
     markerGroup = L.featureGroup().addTo(map);
     map.on('moveend', onMapMoveEnd);
+    map.on('click', () => { unhoverCommunityOnMap(); });
 
     // Add legend initialization logic here, which will be updated by Vue
     return { map, markerClusterGroup, markerGroup };
@@ -240,17 +250,31 @@ export function unhoverTxOnMap() {
 }
 
 export function hoverCommunityOnMap(name, mapInstance, mcGroup, suppressPanCallback) {
-    console.debug("hoverCommunityOnMap called with", name);
+    console.log("hoverCommunityOnMap called with", name);
     stopAllBounce();
     document.getElementById('map').classList.add('hover-unblur');
 
     // dim all markers first
     mcGroup.eachLayer(layer => {
-        if (layer._icon) layer._icon.classList.add('dim');
+        if (layer._icon) {
+            layer._icon.classList.add('dim');
+            const inner = layer._icon.querySelector && layer._icon.querySelector('.price-marker');
+            if (inner) inner.classList.add('dim');
+        }
     });
 
     // clear previous focus markers
-    _hoverFocusMarkers.forEach(m => { if (m._icon) { m._icon.classList.remove('focus'); m._icon.classList.remove('dim'); } });
+    _hoverFocusMarkers.forEach(m => {
+        if (m._icon) {
+            m._icon.classList.remove('focus');
+            m._icon.classList.remove('dim');
+            const inner = m._icon.querySelector && m._icon.querySelector('.price-marker');
+            if (inner) {
+                inner.classList.remove('focus');
+                inner.classList.remove('dim');
+            }
+        }
+    });
     _hoverFocusMarkers = [];
 
     const names = Array.isArray(name) ? name : [name];
@@ -264,8 +288,16 @@ export function hoverCommunityOnMap(name, mapInstance, mcGroup, suppressPanCallb
             }
         }
     });
-    console.debug("matched markers count", matched.length);
+    console.log("matched markers count", matched.length);
     _hoverFocusMarkers = matched;
+
+    // also remove dim from matched markers inner nodes
+    matched.forEach(layer => {
+        if (layer._icon) {
+            const inner = layer._icon.querySelector && layer._icon.querySelector('.price-marker');
+            if (inner) inner.classList.remove('dim');
+        }
+    });
 
     if (matched.length === 0) return;
     const bounds = mapInstance.getBounds();
@@ -284,11 +316,21 @@ export function unhoverCommunityOnMap() {
     stopAllBounce();
     document.getElementById('map').classList.remove('hover-unblur');
     // remove dim/focus from all markers
-    _hoverFocusMarkers.forEach(m => { if (m._icon) m._icon.classList.remove('focus'); });
+    _hoverFocusMarkers.forEach(m => {
+        if (m._icon) {
+            m._icon.classList.remove('focus');
+            const inner = m._icon.querySelector && m._icon.querySelector('.price-marker');
+            if (inner) inner.classList.remove('focus');
+        }
+    });
     _hoverFocusMarkers = [];
     if (markerClusterGroup) {
         markerClusterGroup.eachLayer(layer => {
-            if (layer._icon) layer._icon.classList.remove('dim');
+            if (layer._icon) {
+                layer._icon.classList.remove('dim');
+                const inner = layer._icon.querySelector && layer._icon.querySelector('.price-marker');
+                if (inner) inner.classList.remove('dim');
+            }
         });
     }
 }
@@ -451,7 +493,13 @@ export function plotMarkersOnMap(txData, markerSettings, mapInstance, markerClus
 
         marker.on('mouseover', () => onMarkerHover(marker, g, markerSettings));
         marker.on('mouseout', () => onMarkerUnhover());
-        marker.on('click', () => showClusterListCallback(g.items));
+        marker.on('click', () => {
+            showClusterListCallback(g.items);
+            if (g.label) {
+                console.log('marker clicked, calling hoverCommunityOnMap for', g.label);
+                hoverCommunityOnMap(g.label, mapInstance, markerClusterGroup, () => {});
+            }
+        });
         markerClusterGroup.addLayer(marker);
         boundsArr.push([lat, lng]);
     });
