@@ -148,7 +148,29 @@ export function initMapInstance(getSettings, onMapMoveEnd, showClusterListCallba
 
     clusterIndex = new Supercluster({
         radius: 40,
-        maxZoom: 16
+        maxZoom: 16,
+        map: (props) => ({
+            groupCount: props.groupCount || 1,
+            sumPrice: props.avgPrice > 0 ? props.avgPrice * (props.groupCount || 1) : 0,
+            sumUnitPrice: props.avgUnitPrice > 0 ? props.avgUnitPrice * (props.groupCount || 1) : 0,
+            validP: props.avgPrice > 0 ? (props.groupCount || 1) : 0,
+            validU: props.avgUnitPrice > 0 ? (props.groupCount || 1) : 0,
+            labels: props.groupLabel ? [props.groupLabel] : []
+        }),
+        reduce: (accumulated, props) => {
+            accumulated.groupCount += props.groupCount;
+            accumulated.sumPrice += props.sumPrice;
+            accumulated.sumUnitPrice += props.sumUnitPrice;
+            accumulated.validP += props.validP;
+            accumulated.validU += props.validU;
+            if (props.labels) {
+                for (let i = 0; i < props.labels.length; i++) {
+                    if (accumulated.labels.indexOf(props.labels[i]) === -1) {
+                        accumulated.labels.push(props.labels[i]);
+                    }
+                }
+            }
+        }
     });
 
     map.on('moveend', () => {
@@ -174,7 +196,8 @@ export function bounceElement(el) {
 export function hoverTxOnMap(idx, mapInstance, suppressPanCallback) {
     let targetMarker = null;
     for (let i = 0; i < activeMarkers.length; i++) {
-        if (activeMarkers[i]._groupItems && activeMarkers[i]._groupItems.some(it => it.origIdx === idx)) {
+        const items = activeMarkers[i].getGroupItems ? activeMarkers[i].getGroupItems() : activeMarkers[i]._groupItems;
+        if (items && items.some(it => it.origIdx === idx)) {
             targetMarker = activeMarkers[i];
             break;
         }
@@ -202,7 +225,8 @@ export function hoverCommunityOnMap(name, mapInstance, suppressPanCallback) {
     document.getElementById('map').classList.add('hover-unblur');
     const matched = [];
     activeMarkers.forEach(layer => {
-        if (layer._groupLabel === name || (layer._groupItems && layer._groupItems.some(it => it.tx.community_name === name)))
+        const items = layer.getGroupItems ? layer.getGroupItems() : layer._groupItems;
+        if (layer._groupLabel === name || (items && items.some(it => it.tx.community_name === name)))
             matched.push(layer);
     });
     if (matched.length === 0) return;
@@ -362,28 +386,24 @@ export function updateMapMarkers() {
         let totalUnit = 0;
         let validP = 0;
         let validU = 0;
-        let items = [];
         let labels = [];
 
         if (cluster.properties.cluster) {
-            const leaves = clusterIndex.getLeaves(cluster.properties.cluster_id, Infinity);
-            leaves.forEach(leaf => {
-                const props = leaf.properties;
-                const gc = props.groupCount || 1;
-                totalCount += gc;
-                if (props.avgPrice > 0) { totalPrice += props.avgPrice * gc; validP += gc; }
-                if (props.avgUnitPrice > 0) { totalUnit += props.avgUnitPrice * gc; validU += gc; }
-                if (props.groupLabel) labels.push(props.groupLabel);
-                items = items.concat(props.items);
-            });
+            const props = cluster.properties;
+            totalCount = props.groupCount;
+            totalPrice = props.sumPrice;
+            totalUnit = props.sumUnitPrice;
+            validP = props.validP;
+            validU = props.validU;
+            labels = props.labels || [];
         } else {
             const props = cluster.properties;
-            const gc = props.groupCount || 1;
-            totalCount += gc;
-            if (props.avgPrice > 0) { totalPrice += props.avgPrice * gc; validP += gc; }
-            if (props.avgUnitPrice > 0) { totalUnit += props.avgUnitPrice * gc; validU += gc; }
+            totalCount = props.groupCount || 1;
+            totalPrice = props.avgPrice > 0 ? props.avgPrice * totalCount : 0;
+            totalUnit = props.avgUnitPrice > 0 ? props.avgUnitPrice * totalCount : 0;
+            validP = props.avgPrice > 0 ? totalCount : 0;
+            validU = props.avgUnitPrice > 0 ? totalCount : 0;
             if (props.groupLabel) labels.push(props.groupLabel);
-            items = items.concat(props.items);
         }
 
         const avgPriceWan = validP > 0 ? (totalPrice / validP / 10000) : 0;
@@ -434,13 +454,27 @@ export function updateMapMarkers() {
         marker._avgPrice = totalPrice / (validP || 1);
         marker._avgUnitPrice = totalUnit / (validU || 1);
         marker._groupLabel = uniqueLabels.length === 1 ? uniqueLabels[0] : '';
-        marker._groupItems = items;
+
+        marker.getGroupItems = () => {
+            if (marker._groupItems) return marker._groupItems;
+            let items = [];
+            if (cluster.properties.cluster) {
+                const leaves = clusterIndex.getLeaves(cluster.properties.cluster_id, Infinity);
+                for (const leaf of leaves) {
+                    items = items.concat(leaf.properties.items);
+                }
+            } else {
+                items = cluster.properties.items;
+            }
+            marker._groupItems = items;
+            return items;
+        };
         marker._icon = el;
 
         const groupFake = {
             label: marker._groupLabel,
             communityName: marker._groupLabel,
-            items: items
+            get items() { return marker.getGroupItems(); }
         };
 
         el.addEventListener('mouseenter', () => onMarkerHover(marker, groupFake, settings));
@@ -455,7 +489,7 @@ export function updateMapMarkers() {
                 });
             } else {
                 if (_showClusterListCallbackMap) {
-                    _showClusterListCallbackMap(items);
+                    _showClusterListCallbackMap(marker.getGroupItems());
                 }
             }
         });
