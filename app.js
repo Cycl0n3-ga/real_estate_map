@@ -1,7 +1,7 @@
 // app.js
 import { fetchAcResultsFromApi, doSearchApi, doAreaSearchApi } from './api.js';
 import {
-    initMapInstance, plotMarkersOnMap, clearMapMarkers, hoverTxOnMap, unhoverTxOnMap,
+    initMapInstance, plotMarkersOnMap, hoverTxOnMap, unhoverTxOnMap,
     hoverCommunityOnMap, unhoverCommunityOnMap, locateUserOnMap,
     addLegendToMap, updateLegendOnMap,
     getColorForMode, getBivariateColor, isLotAddress
@@ -87,6 +87,8 @@ createApp({
 
         // Map integration refs
         let mapInstance = null;
+        let markerClusterGroup = null;
+        let markerGroup = null;
 
         // --- Computed ---
         const hamburgerIcon = computed(() => {
@@ -333,7 +335,7 @@ createApp({
                 } else if (!data.transactions || data.transactions.length === 0) {
                     searchMessage.value = '😢 此區域沒有成交紀錄<br><span style="font-size:12px">試試放大地圖或移動到其他區域</span>';
                     summary.value = {};
-                    clearMapMarkers();
+                    if(markerClusterGroup) markerClusterGroup.clearLayers();
                     txData.value = [];
                     processResults();
                 } else {
@@ -382,7 +384,7 @@ createApp({
             if (resData.length === 0) {
                 searchMessage.value = '😢 沒有找到符合條件的資料';
                 summary.value = {};
-                clearMapMarkers();
+                if(markerClusterGroup) markerClusterGroup.clearLayers();
                 txData.value = [];
                 processResults();
                 return;
@@ -403,8 +405,8 @@ createApp({
             txData.value = resData;
             sortData();
             processResults();
-            if (mapInstance) {
-                plotMarkersOnMap(txData.value, markerSettings, mapInstance, fitBounds);
+            if (mapInstance && markerClusterGroup) {
+                plotMarkersOnMap(txData.value, markerSettings, mapInstance, markerClusterGroup, fitBounds, openClusterList);
             }
             if (window.innerWidth <= 768) sidebarShowMobile.value = false;
         };
@@ -439,7 +441,7 @@ createApp({
             if (txData.value.length > 0) {
                 sortData();
                 processResults();
-                plotMarkersOnMap(txData.value, markerSettings, mapInstance, false);
+                plotMarkersOnMap(txData.value, markerSettings, mapInstance, markerClusterGroup, false, openClusterList);
             }
         };
 
@@ -493,8 +495,8 @@ createApp({
         };
 
         const hoverTx = (idx) => {
-            if (mapInstance) {
-                hoverTxOnMap(idx, mapInstance, (suppressed) => { _hoverPanSuppressed = suppressed; });
+            if (mapInstance && markerClusterGroup) {
+                hoverTxOnMap(idx, mapInstance, markerClusterGroup, (suppressed) => { _hoverPanSuppressed = suppressed; });
             }
         };
         const unhoverTx = () => {
@@ -503,8 +505,8 @@ createApp({
 
         const hoverCommunity = (name) => {
             hoveredCommunity.value = name;
-            if (mapInstance) {
-                hoverCommunityOnMap(name, mapInstance, (suppressed) => { _hoverPanSuppressed = suppressed; });
+            if (mapInstance && markerClusterGroup) {
+                hoverCommunityOnMap(name, mapInstance, markerClusterGroup, (suppressed) => { _hoverPanSuppressed = suppressed; });
             }
         };
 
@@ -553,7 +555,7 @@ createApp({
             updateLegendOnMap(getLegendHtml, updateAreaAutoSearch);
             if (txData.value.length > 0) {
                 clearTimeout(window._replotTimer);
-                window._replotTimer = setTimeout(() => { plotMarkersOnMap(txData.value, markerSettings, mapInstance, false); }, 300);
+                window._replotTimer = setTimeout(() => { plotMarkersOnMap(txData.value, markerSettings, mapInstance, markerClusterGroup, false, openClusterList); }, 300);
             }
         };
 
@@ -562,7 +564,7 @@ createApp({
             updateLegendOnMap(getLegendHtml, updateAreaAutoSearch);
             if (txData.value.length > 0) {
                 processResults();
-                plotMarkersOnMap(txData.value, markerSettings, mapInstance, false);
+                plotMarkersOnMap(txData.value, markerSettings, mapInstance, markerClusterGroup, false, openClusterList);
             }
         };
 
@@ -684,11 +686,13 @@ createApp({
 
             const initRes = initMapInstance(() => markerSettings, handleMapMoveEnd, openClusterList);
             mapInstance = initRes.map;
+            markerClusterGroup = initRes.markerClusterGroup;
+            markerGroup = initRes.markerGroup;
 
             mapInstance.on('zoomend', () => {
                 if (markerSettings.displayLogic !== 'all' && txData.value.length > 0) {
                     clearTimeout(window._replotTimer);
-                    window._replotTimer = setTimeout(() => { plotMarkersOnMap(txData.value, markerSettings, mapInstance, false); }, 100);
+                    window._replotTimer = setTimeout(() => { plotMarkersOnMap(txData.value, markerSettings, mapInstance, markerClusterGroup, false, openClusterList); }, 100);
                 }
             });
 
