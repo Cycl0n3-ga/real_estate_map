@@ -757,6 +757,7 @@ body.dark-mode .special-badge {
   .filter-label { display:none; }
   .sidebar {
     width:100%;
+    left:0;
     top:auto;
     bottom:0;
     height:50vh;
@@ -778,7 +779,7 @@ body.dark-mode .special-badge {
     max-width:480px;
   }
   .results .tx-card {
-    width:100%;
+    width:auto;
   }
   .sidebar.show { transform:translateY(0); }
   .sidebar.collapsed { transform:translateY(100%); }
