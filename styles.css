@@ -778,7 +778,7 @@ body.dark-mode .special-badge {
     max-width:480px;
   }
   .results .tx-card {
-    width:100%;
+    width:auto;
   }
   .sidebar.show { transform:translateY(0); }
   .sidebar.collapsed { transform:translateY(100%); }
