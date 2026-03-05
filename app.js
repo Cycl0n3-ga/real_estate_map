@@ -4,7 +4,7 @@ import {
     initMapInstance, plotMarkersOnMap, hoverTxOnMap, unhoverTxOnMap,
     hoverCommunityOnMap, unhoverCommunityOnMap, locateUserOnMap,
     addLegendToMap, updateLegendOnMap,
-    getColorForMode, getBivariateColor, isLotAddress
+    getColorForMode, getBivariateColor, isLotAddress, getBoundsDifference
 } from './map.js';
 
 const { createApp, ref, reactive, computed, watch, onMounted, nextTick } = Vue;
@@ -27,6 +27,10 @@ createApp({
         const lastSearchType = ref('');
         let _areaSearchController = null;
         let _areaSearchTimer = null;
+
+        let lastFetchedBounds = null;
+        let lastSearchConfig = '';
+        let globalCachedTxs = [];
 
         const sidebarCollapsed = ref(false);
         const sidebarShowMobile = ref(false);
@@ -147,6 +151,27 @@ createApp({
                 return (unitPricePing / PING_TO_SQM / 10000).toFixed(1) + '萬/m²';
             }
             return unitPricePing > 0 ? (unitPricePing / 10000).toFixed(1) + '萬/坪' : '-';
+        };
+
+        const recomputeGlobalSummary = (txs) => {
+            if (!txs || txs.length === 0) return {};
+            let prices = [], ups = [], pings = [], ratios = [];
+            txs.forEach(tx => {
+                if (tx.price > 0) prices.push(tx.price);
+                if (tx.unit_price_ping > 0) ups.push(tx.unit_price_ping);
+                if (tx.area_ping > 0) pings.push(tx.area_ping);
+                if (tx.public_ratio > 0) ratios.push(tx.public_ratio);
+            });
+            const avg = arr => arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : 0;
+            return {
+                total: txs.length,
+                avg_price: Math.round(avg(prices)),
+                avg_unit_price_ping: avg(ups),
+                min_unit_price_ping: ups.length ? Math.min(...ups) : 0,
+                max_unit_price_ping: ups.length ? Math.max(...ups) : 0,
+                avg_ping: avg(pings),
+                avg_ratio: avg(ratios)
+            };
         };
 
         const formatDateStr = (raw) => {
@@ -319,10 +344,12 @@ createApp({
                 return;
             }
             if (!kw && !selectedCommunity.value) {
-                doAreaSearch(); return;
+                doAreaSearch(true); return;
             }
 
             hideAcList(); lastSearchType.value = 'keyword';
+            lastFetchedBounds = null; // reset so next area search is full
+            globalCachedTxs = [];
             isLoading.value = true; searchMessage.value = '';
             txData.value = [];
 
@@ -340,26 +367,134 @@ createApp({
             }
         };
 
-        const doAreaSearch = async () => {
+        const doAreaSearch = async (forceFull = false) => {
             if (_areaSearchController) _areaSearchController.abort();
             _areaSearchController = new AbortController();
 
-            const bounds = mapInstance.getBounds(); lastSearchType.value = 'area';
-            isLoading.value = true; searchMessage.value = '';
+            const bounds = mapInstance.getBounds();
+            lastSearchType.value = 'area';
+
+            const currentConfig = `${limitSelect.value}|${getLocationMode()}|${getFilterParamsString()}`;
+            if (currentConfig !== lastSearchConfig) {
+                forceFull = true;
+                lastSearchConfig = currentConfig;
+            }
+
+            if (forceFull) {
+                globalCachedTxs = [];
+            }
+
+            let searchRects = [bounds];
+            if (!forceFull && lastFetchedBounds) {
+                searchRects = getBoundsDifference(bounds, lastFetchedBounds);
+            }
+
+            if (searchRects.length > 0) {
+                isLoading.value = true;
+            }
+            searchMessage.value = '';
 
             try {
-                const data = await doAreaSearchApi(bounds, limitSelect.value, getLocationMode(), getFilterParamsString(), _areaSearchController.signal);
-                if (!data.success) {
-                    searchMessage.value = `❌ ${data.error || '搜尋失敗'}`;
-                } else if (!data.transactions || data.transactions.length === 0) {
+                let newTxs = [];
+                if (searchRects.length > 0) {
+                    const fetchPromises = searchRects.map(rect =>
+                        doAreaSearchApi(rect, limitSelect.value, getLocationMode(), getFilterParamsString(), _areaSearchController.signal)
+                    );
+
+                    const results = await Promise.all(fetchPromises);
+
+                    let hasError = false;
+                    let errorMsg = '';
+
+                    results.forEach(data => {
+                        if (!data.success) {
+                            hasError = true;
+                            errorMsg = data.error || '搜尋失敗';
+                        } else if (data.transactions) {
+                            newTxs.push(...data.transactions);
+                        }
+                    });
+
+                    if (hasError && newTxs.length === 0 && globalCachedTxs.length === 0) {
+                        searchMessage.value = `❌ ${errorMsg}`;
+                        isLoading.value = false;
+                        return;
+                    }
+
+                    if (!markerSettings.showLotAddr) {
+                        newTxs = newTxs.filter(tx => !isLotAddress(tx.address_raw || tx.address || ''));
+                    }
+
+                    if (forceFull || !lastFetchedBounds) {
+                        globalCachedTxs = newTxs;
+                    } else {
+                        const seen = new Set();
+                        const makeKey = tx => `${tx.lat},${tx.lng},${tx.price},${tx.date_raw},${tx.community_name || ''}`;
+                        const merged = [];
+
+                        globalCachedTxs.forEach(tx => {
+                            const k = makeKey(tx);
+                            seen.add(k);
+                            merged.push(tx);
+                        });
+
+                        newTxs.forEach(tx => {
+                            const k = makeKey(tx);
+                            if (!seen.has(k)) {
+                                seen.add(k);
+                                merged.push(tx);
+                            }
+                        });
+                        globalCachedTxs = merged;
+                    }
+
+                    if (lastFetchedBounds) {
+                        lastFetchedBounds.extend(bounds);
+                    } else {
+                        lastFetchedBounds = bounds;
+                    }
+                }
+
+                // Filter global cached txs by current bounds
+                const currentTxs = globalCachedTxs.filter(tx => {
+                    return bounds.contains([tx.lat, tx.lng]);
+                });
+
+                if (currentTxs.length === 0) {
                     searchMessage.value = '😢 此區域沒有成交紀錄<br><span style="font-size:12px">試試放大地圖或移動到其他區域</span>';
                     summary.value = {};
                     if(markerClusterGroup) markerClusterGroup.clearLayers();
                     txData.value = [];
                     processResults();
                 } else {
-                    handleSearchResult(data, false);
+                    txData.value = currentTxs;
+                    summary.value = recomputeGlobalSummary(currentTxs);
+                    communitySummaries.value = {}; // clear so it computes locally
+                    searchedCommunityName.value = null;
+                    searchType.value = 'area';
+
+                    if (forceFull) {
+                        Object.keys(collapsedCommunities).forEach(k => delete collapsedCommunities[k]);
+                        const cNames = [...new Set(currentTxs.map(tx => tx.community_name).filter(Boolean))];
+                        cNames.forEach(cn => { collapsedCommunities[cn] = true; });
+                    } else {
+                        // For incremental searches or zoom-in, just add new communities
+                        const cNames = [...new Set(currentTxs.map(tx => tx.community_name).filter(Boolean))];
+                        cNames.forEach(cn => {
+                            if (collapsedCommunities[cn] === undefined) {
+                                collapsedCommunities[cn] = true;
+                            }
+                        });
+                    }
+
+                    sortData();
+                    processResults();
+                    if (mapInstance && markerClusterGroup) {
+                        plotMarkersOnMap(txData.value, markerSettings, mapInstance, markerClusterGroup, false, openClusterList);
+                    }
+                    if (window.innerWidth <= 768) sidebarShowMobile.value = false;
                 }
+
             } catch (e) {
                 if (e.name === 'AbortError') return;
                 searchMessage.value = `❌ 網路連線異常，請稍後再試<br><span style="font-size:12px">(${e.message})</span>`;
@@ -372,7 +507,7 @@ createApp({
         };
 
         const rerunSearch = () => {
-            if (lastSearchType.value === 'area') doAreaSearch();
+            if (lastSearchType.value === 'area') doAreaSearch(true);
             else if (lastSearchType.value === 'keyword') doSearch();
         };
 
