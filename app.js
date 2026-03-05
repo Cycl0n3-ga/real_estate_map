@@ -132,27 +132,18 @@ createApp({
             }
             return ping > 0 ? ping.toFixed(1) + '坪' : (sqm > 0 ? (sqm / PING_TO_SQM).toFixed(1) + '坪' : '-');
         };
-        const fmtUnitPrice = (unitPricePing) => {
+        const fmtAvgArea = (avgPing) => fmtArea(0, avgPing);
+        const fmtUnitPrice = (unitPricePing, isAvg = false) => {
             if (markerSettings.areaUnit === 'sqm') {
                 if (unitPricePing <= 0) return '-';
-                return Math.round((unitPricePing / PING_TO_SQM) / 10000) + '萬/m²';
+                const upSqm = (unitPricePing / PING_TO_SQM) / 10000;
+                return (isAvg ? upSqm.toFixed(1) : Math.round(upSqm)) + '萬/m²';
             }
-            return unitPricePing > 0 ? Math.round(unitPricePing / 10000) + '萬/坪' : '-';
+            if (unitPricePing <= 0) return '-';
+            const upPing = unitPricePing / 10000;
+            return (isAvg ? upPing.toFixed(1) : Math.round(upPing)) + '萬/坪';
         };
-        const fmtAvgArea = (avgPing) => {
-            if (markerSettings.areaUnit === 'sqm') {
-                const m2 = avgPing > 0 ? avgPing * PING_TO_SQM : 0;
-                return m2 > 0 ? m2.toFixed(1) + ' m²' : '-';
-            }
-            return avgPing > 0 ? avgPing.toFixed(1) + '坪' : '-';
-        };
-        const fmtAvgUnitWan = (unitPricePing) => {
-            if (markerSettings.areaUnit === 'sqm') {
-                if (unitPricePing <= 0) return '-';
-                return (unitPricePing / PING_TO_SQM / 10000).toFixed(1) + '萬/m²';
-            }
-            return unitPricePing > 0 ? (unitPricePing / 10000).toFixed(1) + '萬/坪' : '-';
-        };
+        const fmtAvgUnitWan = (unitPricePing) => fmtUnitPrice(unitPricePing, true);
 
         const recomputeGlobalSummary = (txs) => {
             if (!txs || txs.length === 0) return {};
