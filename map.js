@@ -218,23 +218,45 @@ let _overlayRef = null;
 function ensureOverlay() {
     if (_overlayRef) return _overlayRef;
     console.log("ensureOverlay called");
+    const mapEl = document.getElementById('map');
+    if (!mapEl) return null;
     const ov = document.createElement('div');
     ov.id = 'map-overlay';
-    ov.style.position = 'fixed';
+    ov.style.position = 'absolute';
     ov.style.top = '0';
     ov.style.left = '0';
     ov.style.right = '0';
     ov.style.bottom = '0';
-    ov.style.background = 'rgba(0,0,0,0.3)';
-    ov.style.zIndex = '10000';
+    ov.style.background = 'rgba(255,255,255,0.4)';
+    ov.style.backdropFilter = 'blur(4px)';
+    ov.style.zIndex = '1000';
     ov.style.pointerEvents = 'auto';
-    ov.addEventListener('click', e => { e.stopPropagation(); });
-    document.body.appendChild(ov);
+    ov.addEventListener('click', e => {
+        console.log('overlay clicked');
+        e.stopPropagation();
+        unhoverCommunityOnMap();
+    });
+    mapEl.appendChild(ov);
     _overlayRef = ov;
     return ov;
 }
-function showOverlay() { const ov = ensureOverlay(); if (ov) { ov.style.display = 'block'; console.log("showOverlay"); }}
-function hideOverlay() { if (_overlayRef) { _overlayRef.style.display = 'none'; console.log("hideOverlay"); }}
+function showOverlay() {
+    const ov = ensureOverlay();
+    if (ov) {
+        ov.style.display = 'block';
+        const mapEl = document.getElementById('map');
+        if (mapEl) mapEl.classList.add('overlay-active');
+        console.log("showOverlay");
+    }
+}
+function hideOverlay() {
+    if (_overlayRef) {
+        _overlayRef.style.display = 'none';
+        const mapEl = document.getElementById('map');
+        if (mapEl) mapEl.classList.remove('overlay-active');
+        console.log("hideOverlay");
+    }
+}
 
 // markers that should remain clear when a community is being hovered
 let _hoverFocusMarkers = [];

@@ -798,6 +798,9 @@ createApp({
                     const si = document.getElementById('searchInput');
                     if (si) { si.focus(); e.preventDefault(); }
                 }
+                if (e.key === 'Escape') {
+                    unhoverCommunityOnMap();
+                }
             });
 
             document.addEventListener('click', e => {
