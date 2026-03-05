@@ -124,7 +124,7 @@ createApp({
 
         // --- Formatter & Utilities ---
         const escHtml = s => s ? String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;') : '';
-        const fmtWan = v => { if (!v || v <= 0) return '-'; const w = v / 10000; return w >= 10000 ? (w / 10000).toFixed(1) + '億' : Math.round(w) + '萬'; };
+        const fmtWan = v => { if (!v || v <= 0) return '-'; return v >= 10000 ? (v / 10000).toFixed(1) + '億' : Math.round(v) + '萬'; };
         const fmtArea = (sqm, ping) => {
             if (markerSettings.areaUnit === 'sqm') {
                 const m2 = sqm > 0 ? sqm : (ping > 0 ? ping * PING_TO_SQM : 0);
@@ -135,9 +135,9 @@ createApp({
         const fmtUnitPrice = (unitPricePing) => {
             if (markerSettings.areaUnit === 'sqm') {
                 if (unitPricePing <= 0) return '-';
-                return Math.round((unitPricePing / PING_TO_SQM) / 10000) + '萬/m²';
+                return Math.round(unitPricePing / PING_TO_SQM) + '萬/m²';
             }
-            return unitPricePing > 0 ? Math.round(unitPricePing / 10000) + '萬/坪' : '-';
+            return unitPricePing > 0 ? Math.round(unitPricePing) + '萬/坪' : '-';
         };
         const fmtAvgArea = (avgPing) => {
             if (markerSettings.areaUnit === 'sqm') {
@@ -149,9 +149,9 @@ createApp({
         const fmtAvgUnitWan = (unitPricePing) => {
             if (markerSettings.areaUnit === 'sqm') {
                 if (unitPricePing <= 0) return '-';
-                return (unitPricePing / PING_TO_SQM / 10000).toFixed(1) + '萬/m²';
+                return (unitPricePing / PING_TO_SQM).toFixed(1) + '萬/m²';
             }
-            return unitPricePing > 0 ? (unitPricePing / 10000).toFixed(1) + '萬/坪' : '-';
+            return unitPricePing > 0 ? unitPricePing.toFixed(1) + '萬/坪' : '-';
         };
 
         const recomputeGlobalSummary = (txs) => {
@@ -193,7 +193,7 @@ createApp({
         };
 
         const getPriceClass = (tx) => {
-             const upWan = (tx.unit_price_ping || 0) / 10000;
+             const upWan = tx.unit_price_ping || 0;
              if (upWan > 100) return 'price-high';
              if (upWan > 50) return 'price-mid';
              if (upWan > 0) return 'price-low';
@@ -201,8 +201,8 @@ createApp({
         };
 
         const getColorDotSvg = (tx) => {
-            const upWan = (tx.unit_price_ping || 0) / 10000;
-            const avgPriceW = (tx.price || 0) / 10000, avgUnitW = upWan;
+            const upWan = tx.unit_price_ping || 0;
+            const avgPriceW = tx.price || 0, avgUnitW = upWan;
             if (markerSettings.bubbleMode === 'bivariate') {
                 const bvColor = getBivariateColor(avgUnitW, avgPriceW, markerSettings);
                 return `<svg class="tx-color-dot" width="18" height="18" viewBox="0 0 18 18"><circle cx="9" cy="9" r="8" fill="${bvColor}" stroke="#fff" stroke-width="1.5"/></svg>`;

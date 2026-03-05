@@ -41,7 +41,7 @@
                  class="autocomplete-item" :class="{ selected: i === acIdx }"
                  @click="selectCommunity(r.name)">
                 <span class="ac-name">{{ r.name }}<span class="ac-tag" :class="getMatchTagClass(r.match_type)">{{ r.match_type }}</span></span>
-                <span class="ac-meta">{{ r.tx_count }}筆<span v-if="r.avg_price > 0"> · 均{{ Math.round(r.avg_price / 10000) }}萬</span> · {{ r.district || '' }}</span>
+                <span class="ac-meta">{{ r.tx_count }}筆<span v-if="r.avg_price > 0"> · 均{{ Math.round(r.avg_price) }}萬</span> · {{ r.district || '' }}</span>
             </div>
         </div>
       </div>
