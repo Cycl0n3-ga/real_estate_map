@@ -213,48 +213,28 @@ export function initMapInstance(getSettings, onMapMoveEnd, showClusterListCallba
 
 let _lastBouncingEls = [];
 
-// overlay element reference
-let _overlayRef = null;
-function ensureOverlay() {
-    if (_overlayRef) return _overlayRef;
-    console.log("ensureOverlay called");
-    const mapEl = document.getElementById('map');
-    if (!mapEl) return null;
-    const ov = document.createElement('div');
-    ov.id = 'map-overlay';
-    ov.style.position = 'absolute';
-    ov.style.top = '0';
-    ov.style.left = '0';
-    ov.style.right = '0';
-    ov.style.bottom = '0';
-    ov.style.background = 'rgba(255,255,255,0.4)';
-    ov.style.backdropFilter = 'blur(4px)';
-    ov.style.zIndex = '1000';
-    ov.style.pointerEvents = 'auto';
-    ov.addEventListener('click', e => {
-        console.log('overlay clicked');
-        e.stopPropagation();
-        unhoverCommunityOnMap();
-    });
-    mapEl.appendChild(ov);
-    _overlayRef = ov;
-    return ov;
-}
+let _overlayClickFn = null;
+
 function showOverlay() {
-    const ov = ensureOverlay();
-    if (ov) {
-        ov.style.display = 'block';
-        const mapEl = document.getElementById('map');
-        if (mapEl) mapEl.classList.add('overlay-active');
-        console.log("showOverlay");
+    const mapEl = document.getElementById('map');
+    if (mapEl) {
+        mapEl.classList.add('overlay-active');
+    }
+
+    // Add event listener to map background so clicking outside dismisses hover
+    if (mapInstance && !_overlayClickFn) {
+        _overlayClickFn = () => { unhoverCommunityOnMap(); };
+        mapInstance.on('click', _overlayClickFn);
     }
 }
 function hideOverlay() {
-    if (_overlayRef) {
-        _overlayRef.style.display = 'none';
-        const mapEl = document.getElementById('map');
-        if (mapEl) mapEl.classList.remove('overlay-active');
-        console.log("hideOverlay");
+    const mapEl = document.getElementById('map');
+    if (mapEl) {
+        mapEl.classList.remove('overlay-active');
+    }
+    if (mapInstance && _overlayClickFn) {
+        mapInstance.off('click', _overlayClickFn);
+        _overlayClickFn = null;
     }
 }
 
