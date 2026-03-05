@@ -142,8 +142,8 @@ export function initMapInstance(getSettings, onMapMoveEnd, showClusterListCallba
             if (m._avgPrice > 0) { totalPrice += m._avgPrice * gc; validP += gc; }
             if (m._avgUnitPrice > 0) { totalUnit += m._avgUnitPrice * gc; validU += gc; }
         });
-        const avgPriceWan = validP > 0 ? (totalPrice / validP) : 0;
-        const avgUnitWan = validU > 0 ? (totalUnit / validU) : 0;
+        const avgPriceWan = validP > 0 ? (totalPrice / validP / 10000) : 0;
+        const avgUnitWan = validU > 0 ? (totalUnit / validU / 10000) : 0;
 
         let sz = 44;
         if (totalCount >= 100) sz = 60; else if (totalCount >= 30) sz = 54; else if (totalCount >= 10) sz = 48;
@@ -523,7 +523,7 @@ export function plotMarkersOnMap(txData, markerSettings, mapInstance, markerClus
         if (minPrice > 0 && avgPrice < minPrice) return;
 
         const avgUnitPrice = useRecent ? g.recentAvgUnitPrice : (g.unitPrices.length ? g.unitPrices.reduce((a, b) => a + b, 0) / g.unitPrices.length : 0);
-        const avgPriceWan = avgPrice, avgUnitWan = avgUnitPrice;
+        const avgPriceWan = avgPrice / 10000, avgUnitWan = avgUnitPrice / 10000;
         const label = g.label ? g.label.substring(0, 8) : '';
         let priceText = '';
         if (avgPriceWan >= 10000) priceText = (avgPriceWan / 10000).toFixed(1) + '億';
@@ -588,10 +588,10 @@ function buildGroups(txData, markerSettings) {
 }
 
 function getMinPriceThreshold(zoom, markerSettings) {
-    if (zoom <= 14) return markerSettings.autoThresh14 || 8000;
-    if (zoom === 15) return markerSettings.autoThresh15 || 5000;
-    if (zoom === 16) return markerSettings.autoThresh16 || 2000;
-    return markerSettings.autoThresh17 || 0;
+    if (zoom <= 14) return (markerSettings.autoThresh14 || 8000) * 10000;
+    if (zoom === 15) return (markerSettings.autoThresh15 || 5000) * 10000;
+    if (zoom === 16) return (markerSettings.autoThresh16 || 2000) * 10000;
+    return (markerSettings.autoThresh17 || 0) * 10000;
 }
 
 
