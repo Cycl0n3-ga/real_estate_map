@@ -169,8 +169,11 @@ export function initMapInstance(getSettings, onMapMoveEnd, showClusterListCallba
         const commLabel = uniqueLabels.length === 1 ? uniqueLabels[0].substring(0, 6) : (uniqueLabels.length > 1 ? uniqueLabels.length + ' 個建案' : '');
         const labelHtml = commLabel ? `<div style="margin-top:-2px;padding:1px 4px;background:rgba(255,255,255,.95);border-radius:5px;font-size:8px;font-weight:600;color:#333;white-space:nowrap;max-width:70px;overflow:hidden;text-overflow:ellipsis;box-shadow:0 1px 3px rgba(0,0,0,.1);border:1px solid rgba(0,0,0,.06)">${commLabel}</div>` : '';
         const totalH = commLabel ? sz + 14 : sz;
+        // The cluster logic has been updated to accept data-community attributes on markers.
+        // We ensure that the first label (the community name if all children belong to same community) is added to dataset.
+        const communityDataAttr = (uniqueLabels.length === 1 && uniqueLabels[0]) ? `data-community="${escAttr(uniqueLabels[0])}"` : '';
         return L.divIcon({
-            html: `<div style="display:flex;flex-direction:column;align-items:center">${svgHtml}${labelHtml}</div>`,
+            html: `<div ${communityDataAttr} style="display:flex;flex-direction:column;align-items:center">${svgHtml}${labelHtml}</div>`,
             className: 'price-marker custom-cluster-icon',
             iconSize: [sz + 8, totalH], iconAnchor: [(sz + 8) / 2, totalH / 2]
         });
@@ -302,11 +305,17 @@ export function hoverCommunityOnMap(name, mapInstance, mcGroup, suppressPanCallb
     const names = Array.isArray(name) ? name : [name];
     const matched = [];
     mcGroup.eachLayer(layer => {
-        if (names.some(n => layer._groupLabel === n || (layer._groupItems && layer._groupItems.some(it => it.tx.community_name === n)))) {
+        // Find match in dataset first, then by internal labels
+        const markerEl = layer._icon ? (layer._icon.firstElementChild || layer._icon) : null;
+        const datasetComm = markerEl && markerEl.dataset ? markerEl.dataset.community : null;
+
+        if (names.some(n => datasetComm === n || layer._groupLabel === n || (layer._groupItems && layer._groupItems.some(it => it.tx.community_name === n)))) {
             matched.push(layer);
             if (layer._icon) {
                 layer._icon.classList.add('focus');
                 layer._icon.classList.remove('dim');
+                const inner = layer._icon.querySelector && layer._icon.querySelector('.price-marker');
+                if (inner) inner.classList.add('focus');
             }
         }
     });
@@ -323,9 +332,13 @@ export function hoverCommunityOnMap(name, mapInstance, mcGroup, suppressPanCallb
         mapInstance.panTo(matched[0].getLatLng(), { animate: true, duration: 0.3 });
         setTimeout(() => { suppressPanCallback(false); }, 600);
     }
-    const first = matched.find(m => m._icon && bounds.contains(m.getLatLng())) || matched[0];
-    const doBounce = () => { if (!first._icon) return; bounceElement(first._icon.firstElementChild || first._icon); };
-    if (first._icon) doBounce(); else setTimeout(doBounce, 350);
+
+    // Bounce all matching visible markers
+    matched.forEach(m => {
+        if (m._icon && bounds.contains(m.getLatLng())) {
+             bounceElement(m._icon.firstElementChild || m._icon);
+        }
+    });
 }
 
 export function unhoverCommunityOnMap() {
@@ -494,7 +507,8 @@ export function plotMarkersOnMap(txData, markerSettings, mapInstance, markerClus
 
         const labelHtml = label ? `<div style="margin-top:-2px;padding:1px 5px;background:rgba(255,255,255,.95);border-radius:5px;font-size:${n > 1 ? 9 : 8}px;font-weight:700;color:#333;white-space:nowrap;max-width:80px;overflow:hidden;text-overflow:ellipsis;box-shadow:0 1px 3px rgba(0,0,0,.1);border:1px solid rgba(0,0,0,.06)">${escHtml(label)}</div>` : '';
         const totalH = label ? sz + 15 : sz;
-        const icon = L.divIcon({ html: `<div style="display:flex;flex-direction:column;align-items:center">${svgHtml}${labelHtml}</div>`, iconSize: [sz + 8, totalH], iconAnchor: [(sz + 8) / 2, totalH / 2], className: 'price-marker' });
+        const communityDataAttr = label ? `data-community="${escAttr(label)}"` : '';
+        const icon = L.divIcon({ html: `<div ${communityDataAttr} style="display:flex;flex-direction:column;align-items:center">${svgHtml}${labelHtml}</div>`, iconSize: [sz + 8, totalH], iconAnchor: [(sz + 8) / 2, totalH / 2], className: 'price-marker' });
         const marker = L.marker([lat, lng], { icon });
         marker._groupCount = n; marker._avgPrice = avgPrice; marker._avgUnitPrice = avgUnitPrice; marker._groupLabel = g.label; marker._groupItems = g.items;
 

@@ -416,6 +416,7 @@ select {
   opacity: 0.35 !important;
   filter: blur(2px) grayscale(50%);
   transition: opacity 0.3s, filter 0.3s;
+  pointer-events: none; /* Disable hover/click interactions for blurred markers */
 }
 
 /* Request 2: blur the parent node cluster icon during spiderfy */
@@ -430,6 +431,7 @@ select {
   opacity: 0.35 !important;
   filter: blur(2px) grayscale(50%);
   transition: opacity 0.3s, filter 0.3s;
+  pointer-events: none;
 }
 
 /* Spiderfy leg lines */
