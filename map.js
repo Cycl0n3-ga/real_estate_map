@@ -349,6 +349,10 @@ export function hoverCommunityOnMap(name, mapInstance, mcGroup, suppressPanCallb
             // Leaflet.markercluster doesn't have a direct isSpiderfied, but we can check if m._icon exists
             // If m._icon does not exist, it might be hidden inside the cluster.
             if (!m._icon) {
+                // To prevent race conditions where spiderfying too early (before layout or markers are fully rendered)
+                // causes the cluster to unspiderfy immediately, check the markercluster group's internal state.
+                if (mcGroup._spiderfying || mcGroup._isZooming) return; // Prevent concurrent spiderfying calls
+
                 // Since spiderfy operates on user interaction or internally, we can trigger it:
                 parent.spiderfy();
 
