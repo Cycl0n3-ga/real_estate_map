@@ -504,6 +504,16 @@ export function updateLegendOnMap(getLegendHtml, updateAreaAutoSearchCallback) {
 
 
 export function plotMarkersOnMap(txData, markerSettings, mapInstance, markerClusterGroup, fitBounds, showClusterListCallback) {
+    // Reset visual hover and spiderfied states before clearing layers,
+    // to prevent background blurring from persisting without markers.
+    unhoverTxOnMap();
+    unhoverCommunityOnMap();
+    const mapEl = document.getElementById('map');
+    if (mapEl) {
+        mapEl.classList.remove('spiderfied-active');
+        mapEl.classList.remove('overlay-active');
+    }
+
     markerClusterGroup.clearLayers();
     const boundsArr = [], groups = buildGroups(txData, markerSettings);
     const currentZoom = mapInstance ? mapInstance.getZoom() : 16;
