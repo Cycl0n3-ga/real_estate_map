@@ -181,32 +181,32 @@ export function initMapInstance(getSettings, onMapMoveEnd, showClusterListCallba
         maxClusterRadius: 40, spiderfyDistanceMultiplier: 2.5, iconCreateFunction: iconCreateFn
     });
 
-    markerClusterGroup.on('clusterclick', a => {
+    markerClusterGroup.on('clusterclick', e => {
         // when clicking a cluster, spiderfy and highlight contained communities
-        const layer = a.layer;
-        layer.spiderfy();
-        const childMarkers = layer.getAllChildMarkers();
+        const cluster = e.layer;
+
+        const bottomCluster = cluster._zoom === map.getMaxZoom() || cluster.getChildCount() <= markerClusterGroup.options.spiderfyDistanceMultiplier * 15;
+        if (bottomCluster) {
+            if (cluster._icon) {
+                cluster._icon.classList.remove('spider-focus');
+                cluster._icon.classList.add('spider-parent-blur');
+            }
+            document.getElementById('map').classList.add('spiderfied-active');
+        }
+
+        cluster.spiderfy();
+        const childMarkers = cluster.getAllChildMarkers();
         const labels = [...new Set(childMarkers.map(m => m._groupLabel).filter(Boolean))];
         if (labels.length > 0) {
             hoverCommunityOnMap(labels, map, markerClusterGroup, () => {});
         }
     });
 
-    // Request 3: Use 'spiderfying' to trigger background blur simultaneously with the animation
-    markerClusterGroup.on('spiderfying', e => {
-        // Request 2: Blur the parent node
-        if (e.cluster._icon) {
-            e.cluster._icon.classList.remove('spider-focus');
-            e.cluster._icon.classList.add('spider-parent-blur');
-        }
-        document.getElementById('map').classList.add('spiderfied-active');
-    });
-
     markerClusterGroup.on('spiderfied', e => {
         e.markers.forEach(m => { if (m._icon) m._icon.classList.add('spider-focus'); });
     });
 
-    markerClusterGroup.on('unspiderfying', e => {
+    markerClusterGroup.on('unspiderfied', e => {
         document.getElementById('map').classList.remove('spiderfied-active');
         if (e.cluster._icon) {
             e.cluster._icon.classList.remove('spider-parent-blur');

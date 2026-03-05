@@ -418,14 +418,6 @@ select {
   transition: opacity 0.3s, filter 0.3s;
 }
 
-/* Spiderfy effect: blur map background and unselected markers */
-#map.spiderfied-active .leaflet-tile-pane,
-#map.spiderfied-active .leaflet-overlay-pane,
-#map.spiderfied-active .leaflet-shadow-pane {
-  filter: blur(4px) brightness(0.9);
-  transition: filter 0.3s ease;
-}
-
 /* Request 2: blur the parent node cluster icon during spiderfy */
 .spider-parent-blur {
   filter: blur(4px) !important;
