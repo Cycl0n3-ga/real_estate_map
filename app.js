@@ -421,9 +421,8 @@ createApp({
                         return;
                     }
 
-                    if (!markerSettings.showLotAddr) {
-                        newTxs = newTxs.filter(tx => !isLotAddress(tx.address_raw || tx.address || ''));
-                    }
+                    // Remove the strict lot address filter from the cache insertion,
+                    // so we always cache everything the backend sends, and filter visually later.
 
                     if (forceFull || !lastFetchedBounds) {
                         globalCachedTxs = newTxs;
@@ -448,17 +447,20 @@ createApp({
                         globalCachedTxs = merged;
                     }
 
-                    if (lastFetchedBounds) {
-                        lastFetchedBounds.extend(bounds);
-                    } else {
-                        lastFetchedBounds = bounds;
-                    }
+                    // The bug was extending the bounds. If user moves L-shape,
+                    // it thinks it has fetched the corner when it hasn't.
+                    // We must just track the last fetched view perfectly.
+                    lastFetchedBounds = bounds;
                 }
 
                 // Filter global cached txs by current bounds
-                const currentTxs = globalCachedTxs.filter(tx => {
+                let currentTxs = globalCachedTxs.filter(tx => {
                     return bounds.contains([tx.lat, tx.lng]);
                 });
+
+                if (!markerSettings.showLotAddr) {
+                    currentTxs = currentTxs.filter(tx => !isLotAddress(tx.address_raw || tx.address || ''));
+                }
 
                 if (currentTxs.length === 0) {
                     searchMessage.value = '😢 此區域沒有成交紀錄<br><span style="font-size:12px">試試放大地圖或移動到其他區域</span>';
