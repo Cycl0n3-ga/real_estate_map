@@ -437,6 +437,38 @@ export function onMarkerUnhover() {
     document.querySelectorAll('.community-header.hover-highlight').forEach(h => h.classList.remove('hover-highlight'));
 }
 
+export function getBoundsDifference(newB, oldB) {
+    if (!oldB || !newB.intersects(oldB)) return [newB];
+
+    const diffs = [];
+    const nN = newB.getNorth(), nS = newB.getSouth(), nE = newB.getEast(), nW = newB.getWest();
+    const oN = oldB.getNorth(), oS = oldB.getSouth(), oE = oldB.getEast(), oW = oldB.getWest();
+
+    // Top
+    if (nN > oN) {
+        diffs.push(L.latLngBounds([oN, nW], [nN, nE]));
+    }
+    // Bottom
+    if (nS < oS) {
+        diffs.push(L.latLngBounds([nS, nW], [oS, nE]));
+    }
+
+    const midN = Math.min(nN, oN);
+    const midS = Math.max(nS, oS);
+
+    if (midN > midS) {
+        // Left
+        if (nW < oW) {
+            diffs.push(L.latLngBounds([midS, nW], [midN, oW]));
+        }
+        // Right
+        if (nE > oE) {
+            diffs.push(L.latLngBounds([midS, oE], [midN, nE]));
+        }
+    }
+    return diffs;
+}
+
 export function baseAddress(addr) { if (!addr) return ''; return addr.replace(/\d+樓.*$/, '').replace(/\d+F.*$/i, '').replace(/地下.*$/, ''); }
 export function extractDistrict(tx) { return tx.district || ''; }
 export function isLotAddress(addr) { return /^\S*段\S*地號/.test(addr) || /段\d+地號/.test(addr); }
