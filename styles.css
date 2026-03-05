@@ -408,13 +408,8 @@ select {
 .map-wrap { position:fixed; top:var(--navbar-h); bottom:0; left:0; right:0; }
 #map { width:100%; height:100%; position:relative; }
 
-/* overlay used to dim the map when a community is highlighted */
-#map.overlay-active .leaflet-tile-pane,
-#map.overlay-active .leaflet-overlay-pane,
-#map.overlay-active .leaflet-shadow-pane {
-  filter: blur(4px) brightness(0.9);
-  transition: filter 0.3s ease;
-}
+/* overlay used to dim unfocused markers when a community or tx is highlighted */
+/* Removed background blur for .overlay-active per Request 1 */
 
 /* Spiderfy and Focus markers should stay fully visible and elevated */
 #map.overlay-active .leaflet-marker-pane .price-marker:not(.focus):not(.spider-focus) {
@@ -423,11 +418,20 @@ select {
   transition: opacity 0.3s, filter 0.3s;
 }
 
+/* Spiderfy effect: blur map background and unselected markers */
 #map.spiderfied-active .leaflet-tile-pane,
 #map.spiderfied-active .leaflet-overlay-pane,
 #map.spiderfied-active .leaflet-shadow-pane {
   filter: blur(4px) brightness(0.9);
   transition: filter 0.3s ease;
+}
+
+/* Request 2: blur the parent node cluster icon during spiderfy */
+.spider-parent-blur {
+  filter: blur(4px) !important;
+  opacity: 0.3 !important;
+  pointer-events: none;
+  transition: filter 0.3s, opacity 0.3s;
 }
 
 #map.spiderfied-active .leaflet-marker-pane .price-marker:not(.spider-focus):not(.focus) {

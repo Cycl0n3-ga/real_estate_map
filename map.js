@@ -191,21 +191,36 @@ export function initMapInstance(getSettings, onMapMoveEnd, showClusterListCallba
             hoverCommunityOnMap(labels, map, markerClusterGroup, () => {});
         }
     });
-    markerClusterGroup.on('spiderfied', e => {
-        e.cluster._icon.classList.add('spider-focus');
-        e.markers.forEach(m => { if (m._icon) m._icon.classList.add('spider-focus'); });
+
+    // Request 3: Use 'spiderfying' to trigger background blur simultaneously with the animation
+    markerClusterGroup.on('spiderfying', e => {
+        // Request 2: Blur the parent node
+        if (e.cluster._icon) {
+            e.cluster._icon.classList.remove('spider-focus');
+            e.cluster._icon.classList.add('spider-parent-blur');
+        }
         document.getElementById('map').classList.add('spiderfied-active');
     });
-    markerClusterGroup.on('unspiderfied', e => {
-        if (e.cluster._icon) e.cluster._icon.classList.remove('spider-focus');
-        e.markers.forEach(m => { if (m._icon) m._icon.classList.remove('spider-focus'); });
+
+    markerClusterGroup.on('spiderfied', e => {
+        e.markers.forEach(m => { if (m._icon) m._icon.classList.add('spider-focus'); });
+    });
+
+    markerClusterGroup.on('unspiderfying', e => {
         document.getElementById('map').classList.remove('spiderfied-active');
+        if (e.cluster._icon) {
+            e.cluster._icon.classList.remove('spider-parent-blur');
+        }
+        e.markers.forEach(m => { if (m._icon) m._icon.classList.remove('spider-focus'); });
     });
 
     map.addLayer(markerClusterGroup);
     markerGroup = L.featureGroup().addTo(map);
     map.on('moveend', onMapMoveEnd);
-    map.on('click', () => { unhoverCommunityOnMap(); });
+    map.on('click', () => {
+        unhoverCommunityOnMap();
+        document.dispatchEvent(new CustomEvent('map-bg-click'));
+    });
 
     // Add legend initialization logic here, which will be updated by Vue
     return { map, markerClusterGroup, markerGroup };
@@ -213,28 +228,17 @@ export function initMapInstance(getSettings, onMapMoveEnd, showClusterListCallba
 
 let _lastBouncingEls = [];
 
-let _overlayClickFn = null;
-
 function showOverlay() {
     const mapEl = document.getElementById('map');
     if (mapEl) {
         mapEl.classList.add('overlay-active');
     }
-
-    // Add event listener to map background so clicking outside dismisses hover
-    if (mapInstance && !_overlayClickFn) {
-        _overlayClickFn = () => { unhoverCommunityOnMap(); };
-        mapInstance.on('click', _overlayClickFn);
-    }
 }
+
 function hideOverlay() {
     const mapEl = document.getElementById('map');
     if (mapEl) {
         mapEl.classList.remove('overlay-active');
-    }
-    if (mapInstance && _overlayClickFn) {
-        mapInstance.off('click', _overlayClickFn);
-        _overlayClickFn = null;
     }
 }
 

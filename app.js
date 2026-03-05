@@ -783,6 +783,14 @@ createApp({
             markerClusterGroup = initRes.markerClusterGroup;
             markerGroup = initRes.markerGroup;
 
+            // Global event listener to reset view state when map background is clicked
+            document.addEventListener('map-bg-click', () => {
+                clearSelectedCommunity();
+                closeClusterList();
+                unhoverCommunity();
+                unhoverTx();
+            });
+
             mapInstance.on('zoomend', () => {
                 if (markerSettings.displayLogic !== 'all' && txData.value.length > 0) {
                     clearTimeout(window._replotTimer);
