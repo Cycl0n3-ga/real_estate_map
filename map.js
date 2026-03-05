@@ -169,8 +169,11 @@ export function initMapInstance(getSettings, onMapMoveEnd, showClusterListCallba
         const commLabel = uniqueLabels.length === 1 ? uniqueLabels[0].substring(0, 6) : (uniqueLabels.length > 1 ? uniqueLabels.length + ' 個建案' : '');
         const labelHtml = commLabel ? `<div style="margin-top:-2px;padding:1px 4px;background:rgba(255,255,255,.95);border-radius:5px;font-size:8px;font-weight:600;color:#333;white-space:nowrap;max-width:70px;overflow:hidden;text-overflow:ellipsis;box-shadow:0 1px 3px rgba(0,0,0,.1);border:1px solid rgba(0,0,0,.06)">${commLabel}</div>` : '';
         const totalH = commLabel ? sz + 14 : sz;
+        // The cluster logic has been updated to accept data-community attributes on markers.
+        // We ensure that the first label (the community name if all children belong to same community) is added to dataset.
+        const communityDataAttr = (uniqueLabels.length === 1 && uniqueLabels[0]) ? `data-community="${escAttr(uniqueLabels[0])}"` : '';
         return L.divIcon({
-            html: `<div style="display:flex;flex-direction:column;align-items:center">${svgHtml}${labelHtml}</div>`,
+            html: `<div ${communityDataAttr} style="display:flex;flex-direction:column;align-items:center">${svgHtml}${labelHtml}</div>`,
             className: 'price-marker custom-cluster-icon',
             iconSize: [sz + 8, totalH], iconAnchor: [(sz + 8) / 2, totalH / 2]
         });
@@ -181,31 +184,46 @@ export function initMapInstance(getSettings, onMapMoveEnd, showClusterListCallba
         maxClusterRadius: 40, spiderfyDistanceMultiplier: 2.5, iconCreateFunction: iconCreateFn
     });
 
-    markerClusterGroup.on('clusterclick', a => {
+    markerClusterGroup.on('clusterclick', e => {
         // when clicking a cluster, spiderfy and highlight contained communities
-        const layer = a.layer;
-        layer.spiderfy();
-        const childMarkers = layer.getAllChildMarkers();
+        const cluster = e.layer;
+
+        const bottomCluster = cluster._zoom === map.getMaxZoom() || cluster.getChildCount() <= markerClusterGroup.options.spiderfyDistanceMultiplier * 15;
+        if (bottomCluster) {
+            if (cluster._icon) {
+                cluster._icon.classList.remove('spider-focus');
+                cluster._icon.classList.add('spider-parent-blur');
+            }
+            document.getElementById('map').classList.add('spiderfied-active');
+        }
+
+        cluster.spiderfy();
+        const childMarkers = cluster.getAllChildMarkers();
         const labels = [...new Set(childMarkers.map(m => m._groupLabel).filter(Boolean))];
         if (labels.length > 0) {
             hoverCommunityOnMap(labels, map, markerClusterGroup, () => {});
         }
     });
+
     markerClusterGroup.on('spiderfied', e => {
-        e.cluster._icon.classList.add('spider-focus');
         e.markers.forEach(m => { if (m._icon) m._icon.classList.add('spider-focus'); });
-        document.getElementById('map').classList.add('spiderfied-active');
     });
+
     markerClusterGroup.on('unspiderfied', e => {
-        if (e.cluster._icon) e.cluster._icon.classList.remove('spider-focus');
-        e.markers.forEach(m => { if (m._icon) m._icon.classList.remove('spider-focus'); });
         document.getElementById('map').classList.remove('spiderfied-active');
+        if (e.cluster._icon) {
+            e.cluster._icon.classList.remove('spider-parent-blur');
+        }
+        e.markers.forEach(m => { if (m._icon) m._icon.classList.remove('spider-focus'); });
     });
 
     map.addLayer(markerClusterGroup);
     markerGroup = L.featureGroup().addTo(map);
     map.on('moveend', onMapMoveEnd);
-    map.on('click', () => { unhoverCommunityOnMap(); });
+    map.on('click', () => {
+        unhoverCommunityOnMap();
+        document.dispatchEvent(new CustomEvent('map-bg-click'));
+    });
 
     // Add legend initialization logic here, which will be updated by Vue
     return { map, markerClusterGroup, markerGroup };
@@ -213,48 +231,17 @@ export function initMapInstance(getSettings, onMapMoveEnd, showClusterListCallba
 
 let _lastBouncingEls = [];
 
-// overlay element reference
-let _overlayRef = null;
-function ensureOverlay() {
-    if (_overlayRef) return _overlayRef;
-    console.log("ensureOverlay called");
-    const mapEl = document.getElementById('map');
-    if (!mapEl) return null;
-    const ov = document.createElement('div');
-    ov.id = 'map-overlay';
-    ov.style.position = 'absolute';
-    ov.style.top = '0';
-    ov.style.left = '0';
-    ov.style.right = '0';
-    ov.style.bottom = '0';
-    ov.style.background = 'rgba(255,255,255,0.4)';
-    ov.style.backdropFilter = 'blur(4px)';
-    ov.style.zIndex = '1000';
-    ov.style.pointerEvents = 'auto';
-    ov.addEventListener('click', e => {
-        console.log('overlay clicked');
-        e.stopPropagation();
-        unhoverCommunityOnMap();
-    });
-    mapEl.appendChild(ov);
-    _overlayRef = ov;
-    return ov;
-}
 function showOverlay() {
-    const ov = ensureOverlay();
-    if (ov) {
-        ov.style.display = 'block';
-        const mapEl = document.getElementById('map');
-        if (mapEl) mapEl.classList.add('overlay-active');
-        console.log("showOverlay");
+    const mapEl = document.getElementById('map');
+    if (mapEl) {
+        mapEl.classList.add('overlay-active');
     }
 }
+
 function hideOverlay() {
-    if (_overlayRef) {
-        _overlayRef.style.display = 'none';
-        const mapEl = document.getElementById('map');
-        if (mapEl) mapEl.classList.remove('overlay-active');
-        console.log("hideOverlay");
+    const mapEl = document.getElementById('map');
+    if (mapEl) {
+        mapEl.classList.remove('overlay-active');
     }
 }
 
@@ -318,11 +305,17 @@ export function hoverCommunityOnMap(name, mapInstance, mcGroup, suppressPanCallb
     const names = Array.isArray(name) ? name : [name];
     const matched = [];
     mcGroup.eachLayer(layer => {
-        if (names.some(n => layer._groupLabel === n || (layer._groupItems && layer._groupItems.some(it => it.tx.community_name === n)))) {
+        // Find match in dataset first, then by internal labels
+        const markerEl = layer._icon ? (layer._icon.firstElementChild || layer._icon) : null;
+        const datasetComm = markerEl && markerEl.dataset ? markerEl.dataset.community : null;
+
+        if (names.some(n => datasetComm === n || layer._groupLabel === n || (layer._groupItems && layer._groupItems.some(it => it.tx.community_name === n)))) {
             matched.push(layer);
             if (layer._icon) {
                 layer._icon.classList.add('focus');
                 layer._icon.classList.remove('dim');
+                const inner = layer._icon.querySelector && layer._icon.querySelector('.price-marker');
+                if (inner) inner.classList.add('focus');
             }
         }
     });
@@ -333,15 +326,47 @@ export function hoverCommunityOnMap(name, mapInstance, mcGroup, suppressPanCallb
 
     if (matched.length === 0) { hideOverlay(); return; }
     const bounds = mapInstance.getBounds();
-    const anyVisible = matched.some(m => m._icon && bounds.contains(m.getLatLng()));
+    const anyVisible = matched.some(m => {
+        if (m._icon && bounds.contains(m.getLatLng())) return true;
+        // Check if the marker is inside a visible cluster
+        const parent = mcGroup.getVisibleParent(m);
+        if (parent && parent._icon && bounds.contains(parent.getLatLng())) return true;
+        return false;
+    });
+
     if (!anyVisible) {
         suppressPanCallback(true);
         mapInstance.panTo(matched[0].getLatLng(), { animate: true, duration: 0.3 });
         setTimeout(() => { suppressPanCallback(false); }, 600);
     }
-    const first = matched.find(m => m._icon && bounds.contains(m.getLatLng())) || matched[0];
-    const doBounce = () => { if (!first._icon) return; bounceElement(first._icon.firstElementChild || first._icon); };
-    if (first._icon) doBounce(); else setTimeout(doBounce, 350);
+
+    // Auto-expand cluster and bounce all matching visible markers
+    matched.forEach(m => {
+        // If marker is inside a cluster, spiderfy the cluster
+        const parent = mcGroup.getVisibleParent(m);
+        if (parent && parent.spiderfy) {
+            // It's a cluster. Check if it's already spiderfied
+            // Leaflet.markercluster doesn't have a direct isSpiderfied, but we can check if m._icon exists
+            // If m._icon does not exist, it might be hidden inside the cluster.
+            if (!m._icon) {
+                // Since spiderfy operates on user interaction or internally, we can trigger it:
+                parent.spiderfy();
+
+                // When we trigger spiderfy programmatically, we should manually apply the visual classes to the parent,
+                // as the 'clusterclick' event isn't triggered, only the 'spiderfied' event is.
+                if (parent._icon) {
+                    parent._icon.classList.add('spider-parent-blur');
+                }
+                const mapEl = document.getElementById('map');
+                if (mapEl) mapEl.classList.add('spiderfied-active');
+            }
+        }
+
+        // Now if the marker has an icon (either it was visible or we just spiderfied it)
+        if (m._icon && mapInstance.getBounds().contains(m.getLatLng())) {
+             bounceElement(m._icon.firstElementChild || m._icon);
+        }
+    });
 }
 
 export function unhoverCommunityOnMap() {
@@ -542,7 +567,8 @@ export function plotMarkersOnMap(txData, markerSettings, mapInstance, markerClus
 
         const labelHtml = label ? `<div style="margin-top:-2px;padding:1px 5px;background:rgba(255,255,255,.95);border-radius:5px;font-size:${n > 1 ? 9 : 8}px;font-weight:700;color:#333;white-space:nowrap;max-width:80px;overflow:hidden;text-overflow:ellipsis;box-shadow:0 1px 3px rgba(0,0,0,.1);border:1px solid rgba(0,0,0,.06)">${escHtml(label)}</div>` : '';
         const totalH = label ? sz + 15 : sz;
-        const icon = L.divIcon({ html: `<div style="display:flex;flex-direction:column;align-items:center">${svgHtml}${labelHtml}</div>`, iconSize: [sz + 8, totalH], iconAnchor: [(sz + 8) / 2, totalH / 2], className: 'price-marker' });
+        const communityDataAttr = label ? `data-community="${escAttr(label)}"` : '';
+        const icon = L.divIcon({ html: `<div ${communityDataAttr} style="display:flex;flex-direction:column;align-items:center">${svgHtml}${labelHtml}</div>`, iconSize: [sz + 8, totalH], iconAnchor: [(sz + 8) / 2, totalH / 2], className: 'price-marker' });
         const marker = L.marker([lat, lng], { icon });
         marker._groupCount = n; marker._avgPrice = avgPrice; marker._avgUnitPrice = avgUnitPrice; marker._groupLabel = g.label; marker._groupItems = g.items;
 

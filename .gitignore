@@ -6,3 +6,4 @@ Thumbs.db
 *.swo
 *~
 *.pem
+server.log

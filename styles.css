@@ -408,18 +408,40 @@ select {
 .map-wrap { position:fixed; top:var(--navbar-h); bottom:0; left:0; right:0; }
 #map { width:100%; height:100%; position:relative; }
 
-/* overlay used to dim the map when a community is highlighted */
-#map-overlay {
-  display:none;
-  position:absolute;
-  top:0; left:0; right:0; bottom:0;
-  background:rgba(255,255,255,0); /* transparent to just blur */
-  backdrop-filter: blur(6px);
-  -webkit-backdrop-filter: blur(6px);
-  z-index:1000; /* above most map layers */
-  pointer-events:auto; /* intercept clicks on non‑focused areas */
+/* overlay used to dim unfocused markers when a community or tx is highlighted */
+/* Removed background blur for .overlay-active per Request 1 */
+
+/* Spiderfy and Focus markers should stay fully visible and elevated */
+#map.overlay-active .leaflet-marker-pane .price-marker:not(.focus):not(.spider-focus) {
+  opacity: 0.35 !important;
+  filter: blur(2px) grayscale(50%);
+  transition: opacity 0.3s, filter 0.3s;
+  pointer-events: none; /* Disable hover/click interactions for blurred markers */
 }
-#map.overlay-active { filter: blur(3px); }
+
+/* Request 2: blur the parent node cluster icon during spiderfy */
+.spider-parent-blur {
+  filter: blur(4px) !important;
+  opacity: 0.3 !important;
+  pointer-events: none;
+  transition: filter 0.3s, opacity 0.3s;
+}
+
+#map.spiderfied-active .leaflet-marker-pane .price-marker:not(.spider-focus):not(.focus) {
+  opacity: 0.35 !important;
+  filter: blur(2px) grayscale(50%);
+  transition: opacity 0.3s, filter 0.3s;
+  pointer-events: none;
+}
+
+/* Spiderfy leg lines */
+.leaflet-cluster-spider-leg {
+  stroke-width: 2.5px;
+  stroke: rgba(255, 255, 255, 0.9);
+  stroke-opacity: 0.9;
+  filter: drop-shadow(0px 1px 3px rgba(0,0,0,0.3));
+}
+
 .maplibregl-canvas-container { width:100%; height:100%; }
 
 .map-controls {
@@ -436,10 +458,16 @@ select {
 
 .price-marker { background:none !important; border:none !important; }
 
-.price-marker.focus {
+.price-marker.focus,
+.price-marker.spider-focus {
   filter: none !important;
   opacity: 1 !important;
   z-index: 1100 !important; /* float above overlay */
+}
+
+/* Ensure spiderfied markers themselves are elevated above others */
+.leaflet-marker-pane .spider-focus {
+  z-index: 1100 !important;
 }
 
 /* fallback rule triggered by map container class */
