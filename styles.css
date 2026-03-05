@@ -757,6 +757,7 @@ body.dark-mode .special-badge {
   .filter-label { display:none; }
   .sidebar {
     width:100%;
+    left:0;
     top:auto;
     bottom:0;
     height:50vh;
