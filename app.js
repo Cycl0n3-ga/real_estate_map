@@ -29,6 +29,7 @@ createApp({
         let _areaSearchTimer = null;
 
         let lastFetchedBounds = null;
+        let lastFetchedZoom = null;
         let lastSearchConfig = '';
         let globalCachedTxs = [];
 
@@ -349,6 +350,7 @@ createApp({
 
             hideAcList(); lastSearchType.value = 'keyword';
             lastFetchedBounds = null; // reset so next area search is full
+            lastFetchedZoom = null;
             globalCachedTxs = [];
             isLoading.value = true; searchMessage.value = '';
             txData.value = [];
@@ -372,12 +374,16 @@ createApp({
             _areaSearchController = new AbortController();
 
             const bounds = mapInstance.getBounds();
+            const currentZoom = mapInstance.getZoom();
             lastSearchType.value = 'area';
 
             const currentConfig = `${limitSelect.value}|${getLocationMode()}|${getFilterParamsString()}`;
             if (currentConfig !== lastSearchConfig) {
                 forceFull = true;
                 lastSearchConfig = currentConfig;
+            }
+            if (lastFetchedZoom !== null && currentZoom !== lastFetchedZoom) {
+                forceFull = true;
             }
 
             if (forceFull) {
@@ -451,6 +457,7 @@ createApp({
                     // it thinks it has fetched the corner when it hasn't.
                     // We must just track the last fetched view perfectly.
                     lastFetchedBounds = bounds;
+                    lastFetchedZoom = currentZoom;
                 }
 
                 // Filter global cached txs by current bounds
