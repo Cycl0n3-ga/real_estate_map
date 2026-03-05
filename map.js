@@ -326,16 +326,44 @@ export function hoverCommunityOnMap(name, mapInstance, mcGroup, suppressPanCallb
 
     if (matched.length === 0) { hideOverlay(); return; }
     const bounds = mapInstance.getBounds();
-    const anyVisible = matched.some(m => m._icon && bounds.contains(m.getLatLng()));
+    const anyVisible = matched.some(m => {
+        if (m._icon && bounds.contains(m.getLatLng())) return true;
+        // Check if the marker is inside a visible cluster
+        const parent = mcGroup.getVisibleParent(m);
+        if (parent && parent._icon && bounds.contains(parent.getLatLng())) return true;
+        return false;
+    });
+
     if (!anyVisible) {
         suppressPanCallback(true);
         mapInstance.panTo(matched[0].getLatLng(), { animate: true, duration: 0.3 });
         setTimeout(() => { suppressPanCallback(false); }, 600);
     }
 
-    // Bounce all matching visible markers
+    // Auto-expand cluster and bounce all matching visible markers
     matched.forEach(m => {
-        if (m._icon && bounds.contains(m.getLatLng())) {
+        // If marker is inside a cluster, spiderfy the cluster
+        const parent = mcGroup.getVisibleParent(m);
+        if (parent && parent.spiderfy) {
+            // It's a cluster. Check if it's already spiderfied
+            // Leaflet.markercluster doesn't have a direct isSpiderfied, but we can check if m._icon exists
+            // If m._icon does not exist, it might be hidden inside the cluster.
+            if (!m._icon) {
+                // Since spiderfy operates on user interaction or internally, we can trigger it:
+                parent.spiderfy();
+
+                // When we trigger spiderfy programmatically, we should manually apply the visual classes to the parent,
+                // as the 'clusterclick' event isn't triggered, only the 'spiderfied' event is.
+                if (parent._icon) {
+                    parent._icon.classList.add('spider-parent-blur');
+                }
+                const mapEl = document.getElementById('map');
+                if (mapEl) mapEl.classList.add('spiderfied-active');
+            }
+        }
+
+        // Now if the marker has an icon (either it was visible or we just spiderfied it)
+        if (m._icon && mapInstance.getBounds().contains(m.getLatLng())) {
              bounceElement(m._icon.firstElementChild || m._icon);
         }
     });
