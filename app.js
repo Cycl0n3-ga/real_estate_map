@@ -180,7 +180,7 @@ createApp({
         };
 
         const getPriceClass = (tx) => {
-             const upWan = (tx.unit_price_sqm * PING_TO_SQM || 0) / 10000;
+             const upWan = (tx.unit_price_sqm || 0) / 10000;
              if (upWan > 100) return 'price-high';
              if (upWan > 50) return 'price-mid';
              if (upWan > 0) return 'price-low';
@@ -188,7 +188,7 @@ createApp({
         };
 
         const getColorDotSvg = (tx) => {
-            const upWan = (tx.unit_price_sqm * PING_TO_SQM || 0) / 10000;
+            const upWan = (tx.unit_price_sqm || 0) / 10000;
             const avgPriceW = (tx.price || 0) / 10000, avgUnitW = upWan;
             if (markerSettings.bubbleMode === 'bivariate') {
                 const bvColor = getBivariateColor(avgUnitW, avgPriceW, markerSettings);

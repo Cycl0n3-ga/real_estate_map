@@ -606,14 +606,14 @@ function buildGroups(txData, markerSettings) {
         }
         if (!raw[key]) raw[key] = { label: tx.community_name || baseAddress(tx.address).replace(/^(?:(?:台|臺)(?:北|中|南|東)市|(?:新北|桃園|高雄|基隆|新竹|嘉義)[市縣]|.{2,3}縣)/, '').replace(/^[\u4e00-\u9fff]{1,4}[區鄉鎮市]/, ''), communityName: tx.community_name || '', items: [], lats: [], lngs: [], prices: [], unitPrices: [] };
         const g = raw[key]; g.items.push({ tx, origIdx: idx }); g.lats.push(tx.lat); g.lngs.push(tx.lng);
-        if (tx.price > 0) g.prices.push(tx.price); if (tx.unit_price_sqm > 0) g.unitPrices.push(tx.unit_price_sqm * 3.305785); // Convert to ping for mapping tier logic
+        if (tx.price > 0) g.prices.push(tx.price); if (tx.unit_price_sqm > 0) g.unitPrices.push(tx.unit_price_sqm);
     });
     const arr = Object.values(raw);
     arr.forEach(g => { const sLat = g.lats.slice().sort((a, b) => a - b), sLng = g.lngs.slice().sort((a, b) => a - b), m = Math.floor(sLat.length / 2); g._cLat = sLat[m]; g._cLng = sLng[m]; });
     const nowYear = new Date().getFullYear() - 1911, twoYearThreshold = (nowYear - 2) * 10000;
     arr.forEach(g => {
         const recent = g.items.filter(({ tx }) => { if (tx.is_special) return false; const dr = parseInt(String(tx.date_raw || '0').replace(/\D/g, ''), 10); return dr >= twoYearThreshold; });
-        const rPrices = recent.map(({ tx }) => tx.price).filter(v => v > 0), rUnits = recent.map(({ tx }) => tx.unit_price_sqm * 3.305785).filter(v => v > 0); // Convert to ping for mapping tier logic
+        const rPrices = recent.map(({ tx }) => tx.price).filter(v => v > 0), rUnits = recent.map(({ tx }) => tx.unit_price_sqm).filter(v => v > 0);
         g.recentCount = recent.length; g.recentAvgPrice = rPrices.length ? rPrices.reduce((a, b) => a + b, 0) / rPrices.length : 0; g.recentAvgUnitPrice = rUnits.length ? rUnits.reduce((a, b) => a + b, 0) / rUnits.length : 0;
     });
     return arr;
