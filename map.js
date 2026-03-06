@@ -100,8 +100,14 @@ function fmtBuildDate(raw, settings) {
         // fall through to return raw string below
     }
 
-    // fallback: numeric ROC string like "11305" or longer
-    if (s.length >= 5) {
+    // fallback: numeric ROC string like "1040301" (YYYMMDD) or "11305"
+    if (s.length >= 7) {
+        const rocY = parseInt(s.substring(0, s.length - 4), 10);
+        if (!isNaN(rocY)) {
+            const y = settings && settings.yearFormat === 'ce' ? rocY + 1911 : rocY;
+            return y + '/' + s.substring(s.length - 4, s.length - 2);
+        }
+    } else if (s.length >= 5) {
         const rocY = parseInt(s.substring(0, 3), 10);
         if (!isNaN(rocY)) {
             const y = settings && settings.yearFormat === 'ce' ? rocY + 1911 : rocY;
