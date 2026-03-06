@@ -43,7 +43,7 @@ createApp({
             outerMode: 'unit_price', innerMode: 'total_price',
             contentMode: 'recent2yr',
             unitThresholds: [20, 45, 70], totalThresholds: [500, 1750, 3000],
-            displayLogic: 'auto', osmZoom: 16, showLotAddr: false, yearFormat: 'ce',
+            displayLogic: 'auto', osmZoom: 16, showLotAddr: false, yearFormat: 'roc',
             useExactLocation: false,
             autoThresh14: 8000, autoThresh15: 5000, autoThresh16: 2000, autoThresh17: 0,
             areaUnit: 'ping', themeMode: 'light',
