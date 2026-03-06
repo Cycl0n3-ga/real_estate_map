@@ -114,54 +114,50 @@ createApp({
         const summaryHtml = computed(() => {
             const s = summary.value;
             if (!s || !s.total) return '';
-            const avgUp = fmtUnitPrice(s.avg_unit_price_ping);
-            const minUp = fmtUnitPrice(s.min_unit_price_ping);
-            const maxUp = fmtUnitPrice(s.max_unit_price_ping);
+            const avgUp = fmtUnitPrice(s.avg_unit_price_sqm);
+            const minUp = fmtUnitPrice(s.min_unit_price_sqm);
+            const maxUp = fmtUnitPrice(s.max_unit_price_sqm);
             const comCount = Object.keys(communitySummaries.value).length;
             const comInfo = comCount > 0 ? ` ｜ <span class="val">${comCount}</span> 個建案` : '';
-            return `共 <span class="val">${s.total}</span> 筆${comInfo} ｜ 均價 <span class="val">${fmtWan(s.avg_price)}</span> ｜ 均面積 <span class="val">${fmtAvgArea(s.avg_ping)}</span> ｜ 單價 <span class="val">${avgUp}</span><br>單價區間 <span class="val">${minUp}</span> ~ <span class="val">${maxUp}</span> ｜ 均公設 <span class="val">${s.avg_ratio || '-'}%</span>`;
+            return `共 <span class="val">${s.total}</span> 筆${comInfo} ｜ 均價 <span class="val">${fmtWan(s.avg_price)}</span> ｜ 均面積 <span class="val">${fmtAvgArea(s.avg_area_sqm)}</span> ｜ 單價 <span class="val">${avgUp}</span><br>單價區間 <span class="val">${minUp}</span> ~ <span class="val">${maxUp}</span> ｜ 均公設 <span class="val">${s.avg_ratio || '-'}%</span>`;
         });
 
         // --- Formatter & Utilities ---
         const escHtml = s => s ? String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;') : '';
         const fmtWan = v => { if (!v || v <= 0) return '-'; const w = v / 10000; return w >= 10000 ? (w / 10000).toFixed(1) + '億' : Math.round(w) + '萬'; };
-        const fmtArea = (sqm, ping) => {
-            if (markerSettings.areaUnit === 'sqm') {
-                const m2 = sqm > 0 ? sqm : (ping > 0 ? ping * PING_TO_SQM : 0);
-                return m2 > 0 ? m2.toFixed(1) + ' m²' : '-';
-            }
-            return ping > 0 ? ping.toFixed(1) + '坪' : (sqm > 0 ? (sqm / PING_TO_SQM).toFixed(1) + '坪' : '-');
+        const fmtArea = (sqm) => {
+            if (markerSettings.areaUnit === 'sqm') return sqm > 0 ? sqm.toFixed(1) + ' m²' : '-';
+            return sqm > 0 ? (sqm / PING_TO_SQM).toFixed(1) + '坪' : '-';
         };
-        const fmtAvgArea = (avgPing) => fmtArea(0, avgPing);
-        const fmtUnitPrice = (unitPricePing, isAvg = false) => {
+        const fmtAvgArea = (avgSqm) => fmtArea(avgSqm);
+        const fmtUnitPrice = (unitPriceSqm, isAvg = false) => {
+            if (!unitPriceSqm || unitPriceSqm <= 0) return '-';
             if (markerSettings.areaUnit === 'sqm') {
-                if (unitPricePing <= 0) return '-';
-                const upSqm = (unitPricePing / PING_TO_SQM) / 10000;
+                const upSqm = unitPriceSqm / 10000;
                 return (isAvg ? upSqm.toFixed(1) : Math.round(upSqm)) + '萬/m²';
             }
-            if (unitPricePing <= 0) return '-';
-            const upPing = unitPricePing / 10000;
-            return (isAvg ? upPing.toFixed(1) : Math.round(upPing)) + '萬/坪';
+            const upWan = (unitPriceSqm * PING_TO_SQM) / 10000;
+            return (isAvg ? upWan.toFixed(1) : Math.round(upWan)) + '萬/坪';
         };
-        const fmtAvgUnitWan = (unitPricePing) => fmtUnitPrice(unitPricePing, true);
+        const fmtAvgUnitWan = (unitPriceSqm) => fmtUnitPrice(unitPriceSqm, true);
 
         const recomputeGlobalSummary = (txs) => {
             if (!txs || txs.length === 0) return {};
-            let prices = [], ups = [], pings = [], ratios = [];
+            let prices = [], ups = [], sqms = [], ratios = [];
             txs.forEach(tx => {
                 if (tx.price > 0) prices.push(tx.price);
-                if (tx.unit_price_ping > 0) ups.push(tx.unit_price_ping);
-                if (tx.area_ping > 0) pings.push(tx.area_ping);
+                if (tx.unit_price_sqm > 0) ups.push(tx.unit_price_sqm);
+                if (tx.area_sqm > 0) sqms.push(tx.area_sqm);
                 if (tx.public_ratio > 0) ratios.push(tx.public_ratio);
             });
             const avg = arr => arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : 0;
             return {
                 total: txs.length,
                 avg_price: Math.round(avg(prices)),
-                avg_unit_price_ping: avg(ups),
-                min_unit_price_ping: ups.length ? Math.min(...ups) : 0,
-                max_unit_price_ping: ups.length ? Math.max(...ups) : 0,
-                avg_ping: avg(pings),
+                avg_unit_price_sqm: avg(ups),
+                min_unit_price_sqm: ups.length ? Math.min(...ups) : 0,
+                max_unit_price_sqm: ups.length ? Math.max(...ups) : 0,
+                avg_area_sqm: avg(sqms),
                 avg_ratio: avg(ratios)
             };
         };
@@ -184,7 +180,7 @@ createApp({
         };
 
         const getPriceClass = (tx) => {
-             const upWan = (tx.unit_price_ping || 0) / 10000;
+             const upWan = (tx.unit_price_sqm * PING_TO_SQM || 0) / 10000;
              if (upWan > 100) return 'price-high';
              if (upWan > 50) return 'price-mid';
              if (upWan > 0) return 'price-low';
@@ -192,7 +188,7 @@ createApp({
         };
 
         const getColorDotSvg = (tx) => {
-            const upWan = (tx.unit_price_ping || 0) / 10000;
+            const upWan = (tx.unit_price_sqm * PING_TO_SQM || 0) / 10000;
             const avgPriceW = (tx.price || 0) / 10000, avgUnitW = upWan;
             if (markerSettings.bubbleMode === 'bivariate') {
                 const bvColor = getBivariateColor(avgUnitW, avgPriceW, markerSettings);
@@ -264,7 +260,20 @@ createApp({
             let p = '';
             if(filters.buildType) p += `&building_type=${encodeURIComponent(filters.buildType)}`;
             if(filters.rooms) p += `&rooms=${encodeURIComponent(filters.rooms)}`;
-            if(filters.ping) p += `&ping=${encodeURIComponent(filters.ping)}`;
+            if(filters.ping) {
+                const parts = String(filters.ping).split('-');
+                if (parts.length === 2) {
+                    const minP = parseFloat(parts[0]), maxP = parseFloat(parts[1]);
+                    if (!isNaN(minP) && !isNaN(maxP)) {
+                        const minSqm = minP * PING_TO_SQM, maxSqm = maxP * PING_TO_SQM;
+                        p += `&area_sqm=${minSqm}-${maxSqm}`;
+                    } else {
+                        p += `&ping=${encodeURIComponent(filters.ping)}`; // fallback if not a valid range
+                    }
+                } else {
+                    p += `&ping=${encodeURIComponent(filters.ping)}`;
+                }
+            }
             if(filters.ratio) p += `&public_ratio=${encodeURIComponent(filters.ratio)}`;
             if(filters.unitPrice) p += `&unit_price=${encodeURIComponent(filters.unitPrice)}`;
             if(filters.price) p += `&price=${encodeURIComponent(filters.price)}`;
@@ -594,8 +603,8 @@ createApp({
             const sorters = {
                 date: (a, b) => dir * (b.date_raw || '').localeCompare(a.date_raw || ''),
                 price: (a, b) => dir * ((b.price || 0) - (a.price || 0)),
-                unit_price: (a, b) => dir * ((b.unit_price_ping || 0) - (a.unit_price_ping || 0)),
-                ping: (a, b) => dir * ((b.area_ping || 0) - (a.area_ping || 0)),
+                unit_price: (a, b) => dir * ((b.unit_price_sqm || 0) - (a.unit_price_sqm || 0)),
+                ping: (a, b) => dir * ((b.area_sqm || 0) - (a.area_sqm || 0)),
                 public_ratio: (a, b) => dir * ((a.public_ratio || 999) - (b.public_ratio || 999)),
                 community: (a, b) => {
                     const ca = a.community_name || '', cb2 = b.community_name || '';
@@ -684,10 +693,10 @@ createApp({
 
         const computeLocalStats = (items) => {
             if (!items || items.length === 0) return null;
-            let prices = [], ups = [], pings = [], ratios = [];
-            items.forEach(({ tx }) => { if (tx.price > 0) prices.push(tx.price); if (tx.unit_price_ping > 0) ups.push(tx.unit_price_ping); if (tx.area_ping > 0) pings.push(tx.area_ping); if (tx.public_ratio > 0) ratios.push(tx.public_ratio); });
+            let prices = [], ups = [], sqms = [], ratios = [];
+            items.forEach(({ tx }) => { if (tx.price > 0) prices.push(tx.price); if (tx.unit_price_sqm > 0) ups.push(tx.unit_price_sqm); if (tx.area_sqm > 0) sqms.push(tx.area_sqm); if (tx.public_ratio > 0) ratios.push(tx.public_ratio); });
             const avg = arr => arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : 0;
-            return { count: items.length, avg_price: Math.round(avg(prices)), avg_unit_price_ping: avg(ups), avg_ping: avg(pings), avg_ratio: avg(ratios) };
+            return { count: items.length, avg_price: Math.round(avg(prices)), avg_unit_price_sqm: avg(ups), avg_area_sqm: avg(sqms), avg_ratio: avg(ratios) };
         };
 
         const toggleCommunity = (name) => {

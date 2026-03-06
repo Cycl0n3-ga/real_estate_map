@@ -261,8 +261,8 @@
                     <div style="flex:1;min-width:0">
                         <div class="ch-name">{{ group.name }}</div>
                         <div v-if="group.stats" class="ch-stats-inline">
-                            <span v-if="group.stats.avg_unit_price_ping > 0">均單 {{ fmtAvgUnitWan(group.stats.avg_unit_price_ping) }}</span>
-                            <span v-if="group.stats.avg_ping > 0">均面積 {{ fmtAvgArea(group.stats.avg_ping) }}</span>
+                            <span v-if="group.stats.avg_unit_price_sqm > 0">均單 {{ fmtAvgUnitWan(group.stats.avg_unit_price_sqm) }}</span>
+                            <span v-if="group.stats.avg_area_sqm > 0">均面積 {{ fmtAvgArea(group.stats.avg_area_sqm) }}</span>
                             <span v-if="group.stats.avg_ratio > 0">公設 {{ group.stats.avg_ratio.toFixed(0) }}%</span>
                         </div>
                     </div>
@@ -271,8 +271,8 @@
                 <div v-if="group.stats" class="community-stats" v-show="!collapsedCommunities[group.name]">
                     <div class="cs-item"><span class="cs-label">📊 筆數</span><span class="cs-value">{{ group.items.length }}</span></div>
                     <div class="cs-item"><span class="cs-label">💰 均總</span><span class="cs-value">{{ fmtWan(group.stats.avg_price) }}</span></div>
-                    <div class="cs-item"><span class="cs-label"> 均單</span><span class="cs-value">{{ fmtAvgUnitWan(group.stats.avg_unit_price_ping) }}</span></div>
-                    <div class="cs-item"><span class="cs-label">📐 均面積</span><span class="cs-value">{{ fmtAvgArea(group.stats.avg_ping) }}</span></div>
+                    <div class="cs-item"><span class="cs-label"> 均單</span><span class="cs-value">{{ fmtAvgUnitWan(group.stats.avg_unit_price_sqm) }}</span></div>
+                    <div class="cs-item"><span class="cs-label">📐 均面積</span><span class="cs-value">{{ fmtAvgArea(group.stats.avg_area_sqm) }}</span></div>
                     <div class="cs-item"><span class="cs-label">🏗️ 公設</span><span class="cs-value" :style="{ color: group.stats.avg_ratio > 35 ? 'var(--red)' : group.stats.avg_ratio > 30 ? 'var(--orange)' : 'var(--green)' }">{{ group.stats.avg_ratio > 0 ? group.stats.avg_ratio.toFixed(1) + '%' : '-' }}</span></div>
                 </div>
                 <div class="community-items" :class="{ collapsed: collapsedCommunities[group.name] }" :style="{ maxHeight: collapsedCommunities[group.name] ? '0' : '999999px' }">
@@ -282,7 +282,7 @@
                         <div v-html="getColorDotSvg(item.tx)"></div>
                         <div class="tx-price-col">
                             <div class="tx-price">{{ fmtWan(item.tx.price) }}</div>
-                            <div class="tx-unit">{{ fmtUnitPrice(item.tx.unit_price_ping) }}</div>
+                            <div class="tx-unit">{{ fmtUnitPrice(item.tx.unit_price_sqm) }}</div>
                         </div>
                         <div class="tx-addr" :title="item.tx.address">
                             {{ item.tx.address }}
@@ -293,7 +293,7 @@
                         </div>
                         <div class="tx-detail-row">
                             <span>📅 {{ formatDateStr(item.tx.date_raw) }}</span>
-                            <span>📐 {{ fmtArea(item.tx.area_sqm, item.tx.area_ping) }}</span>
+                            <span>📐 {{ fmtArea(item.tx.area_sqm) }}</span>
                             <span>🏠 {{ item.tx.rooms || 0 }}房{{ item.tx.halls || 0 }}廳{{ item.tx.baths || 0 }}衛</span>
                             <span v-if="item.tx.floor">🏢 {{ item.tx.floor }}F/{{ item.tx.total_floors }}F</span>
                             <span v-if="item.tx.public_ratio > 0" class="tag">公設{{ item.tx.public_ratio }}%</span>
@@ -318,7 +318,7 @@
                         <div v-html="getColorDotSvg(item.tx)"></div>
                         <div class="tx-price-col">
                             <div class="tx-price">{{ fmtWan(item.tx.price) }}</div>
-                            <div class="tx-unit">{{ fmtUnitPrice(item.tx.unit_price_ping) }}</div>
+                            <div class="tx-unit">{{ fmtUnitPrice(item.tx.unit_price_sqm) }}</div>
                         </div>
                         <div class="tx-addr" :title="item.tx.address">
                             {{ item.tx.address }}
@@ -329,7 +329,7 @@
                         </div>
                         <div class="tx-detail-row">
                             <span>📅 {{ formatDateStr(item.tx.date_raw) }}</span>
-                            <span>📐 {{ fmtArea(item.tx.area_sqm, item.tx.area_ping) }}</span>
+                            <span>📐 {{ fmtArea(item.tx.area_sqm) }}</span>
                             <span>🏠 {{ item.tx.rooms || 0 }}房{{ item.tx.halls || 0 }}廳{{ item.tx.baths || 0 }}衛</span>
                             <span v-if="item.tx.floor">🏢 {{ item.tx.floor }}F/{{ item.tx.total_floors }}F</span>
                             <span v-if="item.tx.public_ratio > 0" class="tag">公設{{ item.tx.public_ratio }}%</span>
@@ -358,7 +358,7 @@
                         <div v-html="getColorDotSvg(item.tx)"></div>
                         <div class="tx-price-col">
                             <div class="tx-price">{{ fmtWan(item.tx.price) }}</div>
-                            <div class="tx-unit">{{ fmtUnitPrice(item.tx.unit_price_ping) }}</div>
+                            <div class="tx-unit">{{ fmtUnitPrice(item.tx.unit_price_sqm) }}</div>
                         </div>
                         <div class="tx-addr" :title="item.tx.address">
                             {{ item.tx.address }}
@@ -369,7 +369,7 @@
                         </div>
                         <div class="tx-detail-row">
                             <span>📅 {{ formatDateStr(item.tx.date_raw) }}</span>
-                            <span>📐 {{ fmtArea(item.tx.area_sqm, item.tx.area_ping) }}</span>
+                            <span>📐 {{ fmtArea(item.tx.area_sqm) }}</span>
                             <span>🏠 {{ item.tx.rooms || 0 }}房{{ item.tx.halls || 0 }}廳{{ item.tx.baths || 0 }}衛</span>
                             <span v-if="item.tx.floor">🏢 {{ item.tx.floor }}F/{{ item.tx.total_floors }}F</span>
                             <span v-if="item.tx.public_ratio > 0" class="tag">公設{{ item.tx.public_ratio }}%</span>

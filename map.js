@@ -72,12 +72,12 @@ export function makeBivariateSVG({ sz, color, line1, line2 }) {
 export const escHtml = s => s ? String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;') : '';
 const escAttr = s => s ? String(s).replace(/'/g, '&#39;').replace(/"/g, '&quot;').replace(/</g, '&lt;') : '';
 
-function fmtAvgAreaMap(avgPing, settings) {
+function fmtAvgAreaMap(avgSqm, settings) {
     if (settings.areaUnit === 'sqm') {
-        const m2 = avgPing > 0 ? avgPing * 3.305785 : 0;
-        return m2 > 0 ? m2.toFixed(1) + ' m²' : '-';
+        return avgSqm > 0 ? avgSqm.toFixed(1) + ' m²' : '-';
     }
-    return avgPing > 0 ? avgPing.toFixed(1) + '坪' : '-';
+    const ping = avgSqm > 0 ? avgSqm / 3.305785 : 0;
+    return ping > 0 ? ping.toFixed(1) + '坪' : '-';
 }
 
 function fmtBuildDate(raw, settings) {
@@ -394,8 +394,8 @@ function showMarkerTooltip(marker, group, settings) {
     const maxFloor = floors.length > 0 ? Math.max(...floors) : 0;
     const types = [...new Set(items.map(({ tx }) => tx.building_type).filter(Boolean))];
     const typeText = types.length > 0 ? types.slice(0, 2).join('/') : '-';
-    const pings = items.map(({ tx }) => tx.area_ping).filter(v => v > 0);
-    const avgPing = pings.length > 0 ? (pings.reduce((a, b) => a + b, 0) / pings.length).toFixed(0) : '-';
+    const sqms = items.map(({ tx }) => tx.area_sqm).filter(v => v > 0);
+    const avgSqm = sqms.length > 0 ? (sqms.reduce((a, b) => a + b, 0) / sqms.length).toFixed(1) : '-';
     const completionDates = [...new Set(items.map(({ tx }) => tx.completion_date).filter(Boolean))];
     const buildDateText = completionDates.length > 0 ? fmtBuildDate(completionDates[0], settings) : '-';
     const materials = [...new Set(items.map(({ tx }) => tx.main_material).filter(Boolean))];
@@ -406,7 +406,7 @@ function showMarkerTooltip(marker, group, settings) {
     tip.innerHTML = `${label ? `<div class="mti-name">${escHtml(label)}</div>` : ''}
     <div class="mti-row"><span>📅</span> ${yearRange}年 ｜ 完工 ${buildDateText}</div>
     ${maxFloor > 0 ? `<div class="mti-row"><span>🏢</span> ${maxFloor}樓 ｜ ${escHtml(typeText)} ${escHtml(materialText)}</div>` : `<div class="mti-row"><span>🏠</span> ${escHtml(typeText)} ${escHtml(materialText)}</div>`}
-    <div class="mti-row"><span>📐</span> 均${fmtAvgAreaMap(parseFloat(avgPing), settings)}</div>`;
+    <div class="mti-row"><span>📐</span> 均${fmtAvgAreaMap(parseFloat(avgSqm), settings)}</div>`;
     const iconRect = marker._icon.getBoundingClientRect();
     tip.style.position = 'fixed'; tip.style.left = (iconRect.left + iconRect.width / 2) + 'px';
     tip.style.top = (iconRect.top - 8) + 'px'; tip.style.zIndex = '2000';
@@ -600,14 +600,14 @@ function buildGroups(txData, markerSettings) {
         }
         if (!raw[key]) raw[key] = { label: tx.community_name || baseAddress(tx.address).replace(/^(?:(?:台|臺)(?:北|中|南|東)市|(?:新北|桃園|高雄|基隆|新竹|嘉義)[市縣]|.{2,3}縣)/, '').replace(/^[\u4e00-\u9fff]{1,4}[區鄉鎮市]/, ''), communityName: tx.community_name || '', items: [], lats: [], lngs: [], prices: [], unitPrices: [] };
         const g = raw[key]; g.items.push({ tx, origIdx: idx }); g.lats.push(tx.lat); g.lngs.push(tx.lng);
-        if (tx.price > 0) g.prices.push(tx.price); if (tx.unit_price_ping > 0) g.unitPrices.push(tx.unit_price_ping);
+        if (tx.price > 0) g.prices.push(tx.price); if (tx.unit_price_sqm > 0) g.unitPrices.push(tx.unit_price_sqm * 3.305785); // Convert to ping for mapping tier logic
     });
     const arr = Object.values(raw);
     arr.forEach(g => { const sLat = g.lats.slice().sort((a, b) => a - b), sLng = g.lngs.slice().sort((a, b) => a - b), m = Math.floor(sLat.length / 2); g._cLat = sLat[m]; g._cLng = sLng[m]; });
     const nowYear = new Date().getFullYear() - 1911, twoYearThreshold = (nowYear - 2) * 10000;
     arr.forEach(g => {
         const recent = g.items.filter(({ tx }) => { if (tx.is_special) return false; const dr = parseInt(String(tx.date_raw || '0').replace(/\D/g, ''), 10); return dr >= twoYearThreshold; });
-        const rPrices = recent.map(({ tx }) => tx.price).filter(v => v > 0), rUnits = recent.map(({ tx }) => tx.unit_price_ping).filter(v => v > 0);
+        const rPrices = recent.map(({ tx }) => tx.price).filter(v => v > 0), rUnits = recent.map(({ tx }) => tx.unit_price_sqm * 3.305785).filter(v => v > 0); // Convert to ping for mapping tier logic
         g.recentCount = recent.length; g.recentAvgPrice = rPrices.length ? rPrices.reduce((a, b) => a + b, 0) / rPrices.length : 0; g.recentAvgUnitPrice = rUnits.length ? rUnits.reduce((a, b) => a + b, 0) / rUnits.length : 0;
     });
     return arr;
