@@ -89,11 +89,11 @@
 
         <div class="settings-group-title" style="margin-top:8px">🔶 單價色階 (綠→黃→紅)</div>
         <div class="range-slider-wrap">
-          <div class="rs-label">低於 <span class="highlight-val">{{ unitThresholdsMin }}</span> 萬為綠，高於 <span
-              class="highlight-val">{{ unitThresholdsMax }}</span> 萬為紅</div>
+          <div class="rs-label">低於 <span class="highlight-val">{{ unitThresholdsMin }}</span> 萬/m² 為綠，高於 <span
+              class="highlight-val">{{ unitThresholdsMax }}</span> 萬/m² 為紅</div>
           <div class="rs-container">
-            <input type="range" v-model.number="unitThresholdsMin" min="10" max="150" step="5" @input="updateThresh">
-            <input type="range" v-model.number="unitThresholdsMax" min="10" max="150" step="5" @input="updateThresh">
+            <input type="range" v-model.number="unitThresholdsMin" min="3" max="45" step="1" @input="updateThresh">
+            <input type="range" v-model.number="unitThresholdsMax" min="3" max="45" step="1" @input="updateThresh">
           </div>
         </div>
 
@@ -113,7 +113,7 @@
     <div id="bivariateSettings" v-show="markerSettings.bubbleMode === 'bivariate'">
       <div class="settings-group">
         <div class="settings-group-title" style="margin-bottom:4px">🎨 雙變數預設色盤</div>
-        <div class="biv-hint">系統自動以固定四等份劃分：<br>單價 (X): 25, 40, 60 萬/坪<br>總價 (Y): 800, 1500, 2500 萬</div>
+        <div class="biv-hint">系統自動以固定四等份劃分：<br>單價 (X): 7, 12, 18 萬/m²<br>總價 (Y): 800, 1500, 2500 萬</div>
         <div class="biv-matrix">
              <div v-for="color in getBivariateMatrixPreview()" :key="color" class="biv-cell" :style="{ background: color }"></div>
         </div>

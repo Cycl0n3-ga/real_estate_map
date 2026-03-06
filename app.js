@@ -42,17 +42,17 @@ createApp({
             bubbleMode: 'dual_ring',
             outerMode: 'unit_price', innerMode: 'total_price',
             contentMode: 'recent2yr',
-            unitThresholds: [20, 45, 70], totalThresholds: [500, 1750, 3000],
+            unitThresholds: [6, 14, 21], totalThresholds: [500, 1750, 3000],
             displayLogic: 'auto', osmZoom: 16, showLotAddr: false, yearFormat: 'roc',
             useExactLocation: false,
             autoThresh14: 8000, autoThresh15: 5000, autoThresh16: 2000, autoThresh17: 0,
             areaUnit: 'ping', themeMode: 'light',
-            bivUnitQ: [25, 40, 60], bivTotalQ: [800, 1500, 2500],
+            bivUnitQ: [7, 12, 18], bivTotalQ: [800, 1500, 2500],
         });
 
         // Range slider bounds helpers
-        const unitThresholdsMin = ref(20);
-        const unitThresholdsMax = ref(70);
+        const unitThresholdsMin = ref(6);
+        const unitThresholdsMax = ref(21);
         const totalThresholdsMin = ref(500);
         const totalThresholdsMax = ref(3000);
 
@@ -180,15 +180,15 @@ createApp({
         };
 
         const getPriceClass = (tx) => {
-             const upWan = (tx.unit_price_sqm || 0) * PING_TO_SQM / 10000;  // 元/m² → 萬/坪（閾值以坪定義）
-             if (upWan > 100) return 'price-high';
-             if (upWan > 50) return 'price-mid';
+             const upWan = (tx.unit_price_sqm || 0) / 10000;  // 萬/m²
+             if (upWan > 30) return 'price-high';
+             if (upWan > 15) return 'price-mid';
              if (upWan > 0) return 'price-low';
              return '';
         };
 
         const getColorDotSvg = (tx) => {
-            const upWan = (tx.unit_price_sqm || 0) * PING_TO_SQM / 10000;  // 元/m² → 萬/坪
+            const upWan = (tx.unit_price_sqm || 0) / 10000;  // 萬/m²
             const avgPriceW = (tx.price || 0) / 10000, avgUnitW = upWan;
             if (markerSettings.bubbleMode === 'bivariate') {
                 const bvColor = getBivariateColor(avgUnitW, avgPriceW, markerSettings);
@@ -806,9 +806,9 @@ createApp({
                 if (saved) Object.assign(markerSettings, JSON.parse(saved));
             } catch (e) { }
 
-            if (!markerSettings.unitThresholds || markerSettings.unitThresholds.length !== 3) markerSettings.unitThresholds = [20, 45, 70];
+            if (!markerSettings.unitThresholds || markerSettings.unitThresholds.length !== 3) markerSettings.unitThresholds = [6, 14, 21];
             if (!markerSettings.totalThresholds || markerSettings.totalThresholds.length !== 3) markerSettings.totalThresholds = [500, 1750, 3000];
-            if (!markerSettings.bivUnitQ || markerSettings.bivUnitQ.length !== 3) markerSettings.bivUnitQ = [25, 40, 60];
+            if (!markerSettings.bivUnitQ || markerSettings.bivUnitQ.length !== 3) markerSettings.bivUnitQ = [7, 12, 18];
             if (!markerSettings.bivTotalQ || markerSettings.bivTotalQ.length !== 3) markerSettings.bivTotalQ = [800, 1500, 2500];
 
             unitThresholdsMin.value = markerSettings.unitThresholds[0];
@@ -849,7 +849,7 @@ createApp({
                     matrixHtml += `<div style="width:24px;height:24px;border-radius:4px;background:${color}"></div>`;
                 });
                 matrixHtml += '</div>';
-                const unitShort = markerSettings.areaUnit === 'sqm' ? '單價/m²' : '單價/坪';
+                const unitShort = '單價/m²';
                 legendContent = `<div style="font-weight:800;margin-bottom:8px;font-size:12px;color:var(--primary-dark)">🎨 雙變數色彩映射</div>
                 <div style="font-size:10px;color:var(--text2);line-height:1.6;margin-bottom:6px">
                     <span style="display:inline-block;width:8px;height:8px;background:#6bc5d2;border-radius:1px;margin-right:4px"></span>水平：${unitShort}越高越青<br>
@@ -861,8 +861,8 @@ createApp({
                     總價: ≤${tq[0]}|${tq[0]}-${tq[1]}|${tq[1]}-${tq[2]}|>${tq[2]}
                 </div>`;
             } else {
-                const unitShort = markerSettings.areaUnit === 'sqm' ? '單價/m²' : '單價/坪';
-                const unitLabel = markerSettings.areaUnit === 'sqm' ? '萬/m²' : '萬/坪';
+                const unitShort = '單價/m²';
+                const unitLabel = '萬/m²';
                 legendContent = `<div style="font-weight:800;margin-bottom:8px;font-size:12px;color:var(--primary-dark)">🎯 雙圈色彩定義</div>
                 <div style="font-weight:600;font-size:10px;color:var(--text);margin-bottom:6px;background:var(--bg2);padding:2px 6px;border-radius:4px;display:inline-block">外環＝${markerSettings.outerMode === 'unit_price' ? unitShort : '總價'} ｜ 內圈＝${markerSettings.innerMode === 'unit_price' ? unitShort : '總價'}</div>
                 <div style="display:flex;flex-direction:column;gap:4px;font-size:10px">
