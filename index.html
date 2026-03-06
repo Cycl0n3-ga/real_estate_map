@@ -89,11 +89,11 @@
 
         <div class="settings-group-title" style="margin-top:8px">🔶 單價色階 (綠→黃→紅)</div>
         <div class="range-slider-wrap">
-          <div class="rs-label">低於 <span class="highlight-val">{{ unitThresholdsMin }}</span> 萬/m² 為綠，高於 <span
-              class="highlight-val">{{ unitThresholdsMax }}</span> 萬/m² 為紅</div>
+          <div class="rs-label">低於 <span class="highlight-val">{{ unitThresholdsMin }}</span> {{ markerSettings.areaUnit === 'sqm' ? '萬/m²' : '萬/坪' }} 為綠，高於 <span
+              class="highlight-val">{{ unitThresholdsMax }}</span> {{ markerSettings.areaUnit === 'sqm' ? '萬/m²' : '萬/坪' }} 為紅</div>
           <div class="rs-container">
-            <input type="range" v-model.number="unitThresholdsMin" min="3" max="45" step="1" @input="updateThresh">
-            <input type="range" v-model.number="unitThresholdsMax" min="3" max="45" step="1" @input="updateThresh">
+            <input type="range" v-model.number="unitThresholdsMin" :min="markerSettings.areaUnit === 'sqm' ? 3 : 10" :max="markerSettings.areaUnit === 'sqm' ? 45 : 150" step="1" @input="updateThresh">
+            <input type="range" v-model.number="unitThresholdsMax" :min="markerSettings.areaUnit === 'sqm' ? 3 : 10" :max="markerSettings.areaUnit === 'sqm' ? 45 : 150" step="1" @input="updateThresh">
           </div>
         </div>
 
