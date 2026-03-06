@@ -149,7 +149,7 @@ export function initMapInstance(getSettings, onMapMoveEnd, showClusterListCallba
             if (m._avgUnitPrice > 0) { totalUnit += m._avgUnitPrice * gc; validU += gc; }
         });
         const avgPriceWan = validP > 0 ? (totalPrice / validP / 10000) : 0;
-        const avgUnitWan = validU > 0 ? (totalUnit / validU / 10000) : 0;
+        const avgUnitWan = validU > 0 ? (totalUnit / validU * 3.305785 / 10000) : 0;  // 元/m² → 萬/坪
 
         let sz = 44;
         if (totalCount >= 100) sz = 60; else if (totalCount >= 30) sz = 54; else if (totalCount >= 10) sz = 48;
@@ -554,7 +554,7 @@ export function plotMarkersOnMap(txData, markerSettings, mapInstance, markerClus
         if (minPrice > 0 && avgPrice < minPrice) return;
 
         const avgUnitPrice = useRecent ? g.recentAvgUnitPrice : (g.unitPrices.length ? g.unitPrices.reduce((a, b) => a + b, 0) / g.unitPrices.length : 0);
-        const avgPriceWan = avgPrice / 10000, avgUnitWan = avgUnitPrice / 10000;
+        const avgPriceWan = avgPrice / 10000, avgUnitWan = avgUnitPrice * 3.305785 / 10000;  // 元/m² → 萬/坪
         const label = g.label ? g.label.substring(0, 8) : '';
         let priceText = '';
         if (avgPriceWan >= 10000) priceText = (avgPriceWan / 10000).toFixed(1) + '億';
