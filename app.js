@@ -36,6 +36,7 @@ createApp({
         const sidebarCollapsed = ref(false);
         const sidebarShowMobile = ref(false);
         const isHoveringList = ref(false);
+        const prevAreaUnit = ref('ping');
 
         const showSettings = ref(false);
         const markerSettings = reactive({
@@ -792,6 +793,21 @@ createApp({
         };
 
         const applySettings = () => {
+            if (prevAreaUnit.value !== markerSettings.areaUnit) {
+                if (markerSettings.areaUnit === 'ping') {
+                    unitThresholdsMin.value = Math.round(unitThresholdsMin.value * PING_TO_SQM);
+                    unitThresholdsMax.value = Math.round(unitThresholdsMax.value * PING_TO_SQM);
+                } else {
+                    unitThresholdsMin.value = Math.round(unitThresholdsMin.value / PING_TO_SQM);
+                    unitThresholdsMax.value = Math.round(unitThresholdsMax.value / PING_TO_SQM);
+                }
+                markerSettings.unitThresholds = [
+                    unitThresholdsMin.value,
+                    (unitThresholdsMin.value + unitThresholdsMax.value) / 2,
+                    unitThresholdsMax.value
+                ];
+                prevAreaUnit.value = markerSettings.areaUnit;
+            }
             localStorage.setItem('markerSettings', JSON.stringify(markerSettings));
             updateLegendOnMap(getLegendHtml, updateAreaAutoSearch);
             if (txData.value.length > 0) {
@@ -805,6 +821,8 @@ createApp({
                 const saved = localStorage.getItem('markerSettings');
                 if (saved) Object.assign(markerSettings, JSON.parse(saved));
             } catch (e) { }
+
+            prevAreaUnit.value = markerSettings.areaUnit || 'ping';
 
             if (!markerSettings.unitThresholds || markerSettings.unitThresholds.length !== 3) markerSettings.unitThresholds = [6, 14, 21];
             if (!markerSettings.totalThresholds || markerSettings.totalThresholds.length !== 3) markerSettings.totalThresholds = [500, 1750, 3000];
@@ -849,7 +867,7 @@ createApp({
                     matrixHtml += `<div style="width:24px;height:24px;border-radius:4px;background:${color}"></div>`;
                 });
                 matrixHtml += '</div>';
-                const unitShort = '單價/m²';
+                const unitShort = markerSettings.areaUnit === 'sqm' ? '單價/m²' : '單價/坪';
                 legendContent = `<div style="font-weight:800;margin-bottom:8px;font-size:12px;color:var(--primary-dark)">🎨 雙變數色彩映射</div>
                 <div style="font-size:10px;color:var(--text2);line-height:1.6;margin-bottom:6px">
                     <span style="display:inline-block;width:8px;height:8px;background:#6bc5d2;border-radius:1px;margin-right:4px"></span>水平：${unitShort}越高越青<br>
@@ -861,8 +879,8 @@ createApp({
                     總價: ≤${tq[0]}|${tq[0]}-${tq[1]}|${tq[1]}-${tq[2]}|>${tq[2]}
                 </div>`;
             } else {
-                const unitShort = '單價/m²';
-                const unitLabel = '萬/m²';
+                const unitShort = markerSettings.areaUnit === 'sqm' ? '單價/m²' : '單價/坪';
+                const unitLabel = markerSettings.areaUnit === 'sqm' ? '萬/m²' : '萬/坪';
                 legendContent = `<div style="font-weight:800;margin-bottom:8px;font-size:12px;color:var(--primary-dark)">🎯 雙圈色彩定義</div>
                 <div style="font-weight:600;font-size:10px;color:var(--text);margin-bottom:6px;background:var(--bg2);padding:2px 6px;border-radius:4px;display:inline-block">外環＝${markerSettings.outerMode === 'unit_price' ? unitShort : '總價'} ｜ 內圈＝${markerSettings.innerMode === 'unit_price' ? unitShort : '總價'}</div>
                 <div style="display:flex;flex-direction:column;gap:4px;font-size:10px">
