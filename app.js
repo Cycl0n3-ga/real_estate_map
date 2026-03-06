@@ -58,13 +58,13 @@ createApp({
 
         const showFilters = ref(false);
         const filters = reactive({
-            buildType: '', rooms: '', area_sqm: '', ratio: '', unitPrice: '', price: '', year: '', excludeSpecial: false
+            buildType: '', rooms: '', ping: '', ratio: '', unitPrice: '', price: '', year: '', excludeSpecial: false
         });
         const quickFilterActive = ref('');
 
         const sortOptions = [
             { label: '日期', value: 'date' }, { label: '總價', value: 'price' },
-            { label: '單價', value: 'unit_price' }, { label: '面積', value: 'area_sqm' },
+            { label: '單價', value: 'unit_price' }, { label: '坪數', value: 'ping' },
             { label: '公設', value: 'public_ratio' }, { label: '建案', value: 'community' }
         ];
         const currentSort = ref('date');
@@ -225,7 +225,7 @@ createApp({
         };
 
         const clearFilters = () => {
-            filters.buildType = ''; filters.rooms = ''; filters.area_sqm = '';
+            filters.buildType = ''; filters.rooms = ''; filters.ping = '';
             filters.ratio = ''; filters.unitPrice = ''; filters.price = '';
             filters.year = ''; filters.excludeSpecial = false;
             quickFilterActive.value = '';
@@ -260,7 +260,20 @@ createApp({
             let p = '';
             if(filters.buildType) p += `&building_type=${encodeURIComponent(filters.buildType)}`;
             if(filters.rooms) p += `&rooms=${encodeURIComponent(filters.rooms)}`;
-            if(filters.area_sqm) p += `&area_sqm=${encodeURIComponent(filters.area_sqm)}`;
+            if(filters.ping) {
+                const parts = String(filters.ping).split('-');
+                if (parts.length === 2) {
+                    const minP = parseFloat(parts[0]), maxP = parseFloat(parts[1]);
+                    if (!isNaN(minP) && !isNaN(maxP)) {
+                        const minSqm = minP * PING_TO_SQM, maxSqm = maxP * PING_TO_SQM;
+                        p += `&area_sqm=${minSqm}-${maxSqm}`;
+                    } else {
+                        p += `&ping=${encodeURIComponent(filters.ping)}`; // fallback if not a valid range
+                    }
+                } else {
+                    p += `&ping=${encodeURIComponent(filters.ping)}`;
+                }
+            }
             if(filters.ratio) p += `&public_ratio=${encodeURIComponent(filters.ratio)}`;
             if(filters.unitPrice) p += `&unit_price=${encodeURIComponent(filters.unitPrice)}`;
             if(filters.price) p += `&price=${encodeURIComponent(filters.price)}`;
@@ -591,7 +604,7 @@ createApp({
                 date: (a, b) => dir * (b.date_raw || '').localeCompare(a.date_raw || ''),
                 price: (a, b) => dir * ((b.price || 0) - (a.price || 0)),
                 unit_price: (a, b) => dir * ((b.unit_price_sqm || 0) - (a.unit_price_sqm || 0)),
-                area_sqm: (a, b) => dir * ((b.area_sqm || 0) - (a.area_sqm || 0)),
+                ping: (a, b) => dir * ((b.area_sqm || 0) - (a.area_sqm || 0)),
                 public_ratio: (a, b) => dir * ((a.public_ratio || 999) - (b.public_ratio || 999)),
                 community: (a, b) => {
                     const ca = a.community_name || '', cb2 = b.community_name || '';
