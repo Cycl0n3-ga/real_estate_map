@@ -39,7 +39,13 @@ function priceColorGradient(value, lo, hi) {
     return `hsl(${Math.round(hue)},${Math.round(sat)}%,${Math.round(light)}%)`;
 }
 
-function getUnitPriceColor(wan, settings) { return priceColorGradient(wan, settings.unitThresholds[0], settings.unitThresholds[2]); }
+function getUnitPriceColor(wan, settings) {
+    let scaledWan = wan;
+    if (settings.areaUnit === 'ping') {
+        scaledWan = wan * 3.305785;
+    }
+    return priceColorGradient(scaledWan, settings.unitThresholds[0], settings.unitThresholds[2]);
+}
 function getTotalPriceColor(wan, settings) { return priceColorGradient(wan, settings.totalThresholds[0], settings.totalThresholds[2]); }
 export function getColorForMode(mode, avgPriceWan, avgUnitWan, settings) {
     if (mode === 'total_price') return getTotalPriceColor(avgPriceWan, settings);
